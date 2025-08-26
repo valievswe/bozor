@@ -1,0 +1,135 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---- TIZIMNI BOSHQARISH MODELLARI ----
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  firstName String?
+  lastName  String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  role   Role @relation(fields: [roleId], references: [id])
+  roleId Int
+
+  createdOwners Owner[]
+  createdLeases Lease[]
+}
+
+model Role {
+  id          Int              @id @default(autoincrement())
+  name        String           @unique
+  description String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  users       User[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id          Int              @id @default(autoincrement())
+  action      String           @unique
+  description String?
+  roles       RolePermission[]
+}
+
+model RolePermission {
+  roleId       Int
+  permissionId Int
+  assignedAt   DateTime   @default(now())
+  role         Role       @relation(fields: [roleId], references: [id])
+  permission   Permission @relation(fields: [permissionId], references: [id])
+
+  @@id([roleId, permissionId])
+}
+
+// ---- BIZNES MODELLARI ----
+
+model Owner {
+  id           Int      @id @default(autoincrement())
+  fullName     String
+  tin          String   @unique
+  address      String?
+  activityType String?
+  phoneNumber  String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  leases      Lease[]
+  createdBy   User    @relation(fields: [createdById], references: [id])
+  createdById Int
+}
+
+model Store {
+  id          Int       @id @default(autoincrement())
+  storeNumber String    @unique
+  area        Float
+  description String?
+  type        StoreType @default(SHOP)
+  leases      Lease[]
+}
+
+//store type
+enum StoreType {
+  SHOP // Do'kon
+  WAREHOUSE // Ombor
+  CONTAINER // Konteyner
+  OTHER // Boshqa
+}
+
+model Stall {
+  id          Int     @id @default(autoincrement())
+  stallNumber String  @unique
+  area        Float
+  description String?
+
+  leases Lease[]
+}
+
+model Transaction {
+  id                 Int     @id @default(autoincrement())
+  amount             Decimal
+  status             String  @default("PENDING") // PENDING, PAID, FAILED, CANCELLED
+  paymeTransactionId String? // The transaction ID received from Payme
+
+  lease   Lease @relation(fields: [leaseId], references: [id])
+  leaseId Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Lease {
+  id                Int       @id @default(autoincrement())
+  certificateNumber String?
+  issueDate         DateTime?
+  expiryDate        DateTime?
+  isActive          Boolean   @default(true)
+  shopMonthlyFee    Decimal?
+  stallMonthlyFee   Decimal?
+  guardFee          Decimal?
+  paymeKassaId      String    @unique
+
+  owner        Owner         @relation(fields: [ownerId], references: [id])
+  ownerId      Int
+  store        Store?        @relation(fields: [storeId], references: [id])
+  storeId      Int?
+  stall        Stall?        @relation(fields: [stallId], references: [id])
+  stallId      Int?
+  createdBy    User          @relation(fields: [createdById], references: [id])
+  createdById  Int
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  transactions Transaction[]
+}

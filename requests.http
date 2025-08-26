@@ -1,0 +1,393 @@
+### ========================================
+### BOZOR MANAGEMENT SYSTEM API TESTS
+### ========================================
+
+### 1. AUTHENTICATION TESTS
+### ========================================
+
+### Login as Admin - Get JWT Token
+# @name loginAdmin
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "superadmin123"
+}
+
+### Login with Invalid Credentials
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "wrong@example.com",
+  "password": "wrongpassword"
+}
+
+### Login with Missing Fields
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@example.com"
+}
+
+### Extract token from successful login
+@authToken = {{loginAdmin.response.body.token}}
+
+### ========================================
+### OWNER MANAGEMENT TESTS
+### ========================================
+
+### Create New Owner (Authenticated)
+POST http://localhost:3000/api/owners
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "fullName": "Aziz Karimov",
+  "tin": "123456789",
+  "address": "Toshkent shahri, Chilonzor tumani",
+  "activityType": "Savdo",
+  "phoneNumber": "+998901234567"
+}
+
+### Create Owner with Missing Required Fields
+POST http://localhost:3000/api/owners
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "fullName": "Incomplete Owner"
+}
+
+### Create Owner without Authentication
+POST http://localhost:3000/api/owners
+Content-Type: application/json
+
+{
+  "fullName": "Unauthorized Owner",
+  "tin": "987654321",
+  "address": "Test Address"
+}
+
+### Get All Owners (Authenticated)
+GET http://localhost:3000/api/owners
+Authorization: Bearer {{authToken}}
+
+### Get All Owners without Authentication
+GET http://localhost:3000/api/owners
+
+### Get Owner by ID (Authenticated)
+# Replace {id} with actual owner ID from previous responses
+GET http://localhost:3000/api/owners/1
+Authorization: Bearer {{authToken}}
+
+### Get Non-existent Owner
+GET http://localhost:3000/api/owners/999
+Authorization: Bearer {{authToken}}
+
+### Update Owner (Authenticated)
+# Replace {id} with actual owner ID
+PUT http://localhost:3000/api/owners/1
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "fullName": "Aziz Karimov Updated",
+  "address": "Yangi manzil",
+  "phoneNumber": "+998901234568"
+}
+
+### Update Owner without Authentication
+PUT http://localhost:3000/api/owners/1
+Content-Type: application/json
+
+{
+  "fullName": "Unauthorized Update"
+}
+
+### ========================================
+### LEASE MANAGEMENT TESTS
+### ========================================
+
+### Create New Lease - Owner Only (No Store/Stall)
+# This should work since storeId and stallId are optional
+POST http://localhost:3000/api/leases
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "ownerId": 1,
+  "certificateNumber": "CERT-2025-001",
+  "issueDate": "2024-01-15",
+  "expiryDate": "2024-12-31",
+  "guardFee": 50000,
+  "paymeKassaId": "PAYME-002"
+}
+
+### Create Lease with Missing Required Fields
+POST http://localhost:3000/api/leases
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "certificateNumber": "CERT-2024-002",
+  "issueDate": "2024-01-20"
+}
+
+### Create Lease with Non-existent Owner
+POST http://localhost:3000/api/leases
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "ownerId": 999,
+  "certificateNumber": "CERT-2024-003",
+  "issueDate": "2024-01-25",
+  "expiryDate": "2024-12-31",
+  "guardFee": 50000,
+  "paymeKassaId": "PAYME-003"
+}
+
+### Create Lease with Non-existent Store
+POST http://localhost:3000/api/leases
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "ownerId": 1,
+  "storeId": 999,
+  "certificateNumber": "CERT-2024-004",
+  "issueDate": "2024-01-30",
+  "expiryDate": "2024-12-31",
+  "shopMonthlyFee": 500000,
+  "guardFee": 50000,
+  "paymeKassaId": "PAYME-004"
+}
+
+### Create Lease with Non-existent Stall
+POST http://localhost:3000/api/leases
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "ownerId": 1,
+  "stallId": 999,
+  "certificateNumber": "CERT-2024-005",
+  "issueDate": "2024-02-01",
+  "expiryDate": "2024-12-31",
+  "stallMonthlyFee": 300000,
+  "guardFee": 30000,
+  "paymeKassaId": "PAYME-005"
+}
+
+### Create Lease with Duplicate PaymeKassaId
+POST http://localhost:3000/api/leases
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "ownerId": 1,
+  "certificateNumber": "CERT-2024-006",
+  "issueDate": "2024-02-05",
+  "expiryDate": "2024-12-31",
+  "guardFee": 50000,
+  "paymeKassaId": "PAYME-001"
+}
+
+### Create Lease without Authentication
+POST http://localhost:3000/api/leases
+Content-Type: application/json
+
+{
+  "ownerId": 1,
+  "certificateNumber": "CERT-2024-007",
+  "issueDate": "2024-02-10",
+  "expiryDate": "2024-12-31",
+  "guardFee": 50000,
+  "paymeKassaId": "PAYME-007"
+}
+
+### ========================================
+### ERROR HANDLING TESTS
+### ========================================
+
+### Test Invalid Token
+GET http://localhost:3000/api/owners
+Authorization: Bearer invalid_token_here
+
+### Test Expired Token (if you have one)
+GET http://localhost:3000/api/owners
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEsInJvbGVJZCI6MSwiaWF0IjoxNjM5NzQ5NjAwLCJleHAiOjE2Mzk3NTEyMDB9.invalid_signature
+
+### Test Non-existent Endpoint
+GET http://localhost:3000/api/nonexistent
+
+### ========================================
+### HEALTH CHECK
+### ========================================
+
+### Server Health Check
+GET http://localhost:3000/api/health
+
+### ========================================
+### NOTES FOR TESTING
+### ========================================
+# 
+# 1. Make sure the server is running on port 3000
+# 2. Ensure the database is properly seeded with test data
+# 3. The admin user should exist: admin@example.com / superadmin123
+# 4. Owner IDs, Store IDs, and Stall IDs should exist in the database
+# 5. All monetary values are in Uzbekistani Som (UZS)
+# 6. Dates should be in ISO format (YYYY-MM-DD)
+# 7. TIN (Tax Identification Number) should be unique for each owner
+# 8. PaymeKassaId should be unique for each lease
+#
+
+### ========================================
+### PAYMENT SYSTEM TESTS
+### ========================================
+
+### Get Lease Information for Payment Page (Public)
+# This endpoint is used by the customer payment page
+GET http://localhost:3000/api/payments/public/leases/1
+
+### Get Non-existent Lease for Payment
+GET http://localhost:3000/api/payments/public/leases/999
+
+### Initiate Payment (Public Endpoint)
+# This is called from the customer payment page
+POST http://localhost:3000/api/payments/public/payments/initiate
+Content-Type: application/json
+
+{
+  "leaseId": 1,
+  "amount": 500000
+}
+
+### Initiate Payment with Missing Fields
+POST http://localhost:3000/api/payments/public/payments/initiate
+Content-Type: application/json
+
+{
+  "leaseId": 1
+}
+
+### Initiate Payment with Non-existent Lease
+POST http://localhost:3000/api/payments/public/payments/initiate
+Content-Type: application/json
+
+{
+  "leaseId": 999,
+  "amount": 500000
+}
+
+### Payme Webhook - CheckPerformTransaction
+# This simulates what Payme sends to verify the transaction
+POST http://localhost:3000/api/payments/payments/callback
+Content-Type: application/json
+
+{
+  "method": "CheckPerformTransaction",
+  "params": {
+    "amount": 50000000,
+    "account": {
+      "lease_id": "1"
+    }
+  },
+  "id": 1
+}
+
+### Payme Webhook - PerformTransaction
+# This simulates Payme confirming the payment
+POST http://localhost:3000/api/payments/payments/callback
+Content-Type: application/json
+
+{
+  "method": "PerformTransaction",
+  "params": {
+    "amount": 50000000,
+    "account": {
+      "lease_id": "1"
+    },
+    "transact": "PAYME_TRANSACTION_ID_123"
+  },
+  "id": 1
+}
+
+### Payme Webhook - CancelTransaction
+# This simulates Payme cancelling the payment
+POST http://localhost:3000/api/payments/payments/callback
+Content-Type: application/json
+
+{
+  "method": "CancelTransaction",
+  "params": {
+    "amount": 50000000,
+    "account": {
+      "lease_id": "1"
+    },
+    "transact": "PAYME_TRANSACTION_ID_123"
+  },
+  "id": 1
+}
+
+### Payme Webhook - Unknown Method
+POST http://localhost:3000/api/payments/payments/callback
+Content-Type: application/json
+
+{
+  "method": "UnknownMethod",
+  "params": {},
+  "id": 1
+}
+
+### ========================================
+### PROTECTED PAYMENT ENDPOINTS (ADMIN)
+### ========================================
+
+### Initiate Payment from Admin Panel (Protected)
+POST http://localhost:3000/api/payments/payments/initiate
+Content-Type: application/json
+Authorization: Bearer {{authToken}}
+
+{
+  "leaseId": 1,
+  "amount": 500000
+}
+
+### Get Transaction History (Protected)
+GET http://localhost:3000/api/payments/payments/transactions/1
+Authorization: Bearer {{authToken}}
+
+### Get Transaction History without Authentication
+GET http://localhost:3000/api/payments/payments/transactions/1
+
+### ========================================
+### NOTES FOR PAYMENT TESTING
+### ========================================
+# 
+# 1. Environment Variables Required:
+#    - PAYME_MERCHANT_ID: Your Payme merchant ID
+#    - PAYME_SECRET_KEY: Your Payme secret key
+#    - PAYME_BASE_URL: Payme API base URL (optional, defaults to https://checkout.paycom.uz)
+#
+# 2. Payme Integration Notes:
+#    - Amounts in Payme API are in tiyin (1 UZS = 100 tiyin)
+#    - The service automatically converts UZS to tiyin
+#    - Webhook endpoints must be publicly accessible
+#    - Payme will call the callback endpoint to verify and confirm transactions
+#
+# 3. Testing Workflow:
+#    a. Create an owner and lease first
+#    b. Test the public lease info endpoint
+#    c. Test payment initiation
+#    d. Test webhook callbacks (simulate Payme responses)
+#    e. Test protected admin endpoints
+#
+# 4. QR Code Generation:
+#    - For lease ID 1: https://your-domain.com/pay/lease/1
+#    - Generate QR codes for each active lease
+#    - Customers scan QR → Payment page → Payme → Success/Failure
+#
