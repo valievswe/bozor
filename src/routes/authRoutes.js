@@ -7,10 +7,5 @@ const {
 } = require("../middlewares/authMiddleware");
 
 router.post("/login", authController.login);
-router.post(
-  "/register",
-  [isAuthenticated, hasPermission("MANAGE_USERS")],
-  authController.register
-);
 
 module.exports = router;

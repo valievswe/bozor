@@ -7,6 +7,7 @@ const leaseRoutes = require("./leaseRoutes.js");
 const storeRoutes = require("./storeRoutes.js");
 const stallRoutes = require("./stallRoutes.js");
 const paymentRoutes = require("./paymentRoutes.js");
+const userRoutes = require("./userRoutes.js");
 
 const router = express.Router();
 
@@ -27,5 +28,8 @@ router.use("/stalls", stallRoutes);
 
 // http://localhost:3000/api/payments/
 router.use("/payments", paymentRoutes);
+
+// http://localhost:3000/api/users/
+router.use("/users", userRoutes);
 
 module.exports = router;

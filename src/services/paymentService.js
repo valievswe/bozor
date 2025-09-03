@@ -306,8 +306,38 @@ const cancelTransaction = async (params, id) => {
   };
 };
 
+const getAllTransactions = async () => {
+  return prisma.transaction.findMany({
+    orderBy: {
+      createdAt: "desc", // Show the newest transactions first
+    },
+    include: {
+      lease: {
+        include: {
+          owner: {
+            select: {
+              fullName: true,
+            },
+          },
+          store: {
+            select: {
+              storeNumber: true,
+            },
+          },
+          stall: {
+            select: {
+              stallNumber: true,
+            },
+          },
+        },
+      },
+    },
+  });
+};
+
 module.exports = {
   getLeaseForPayment,
   initiatePayment,
   handlePaymeCallback,
+  getAllTransactions,
 };

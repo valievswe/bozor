@@ -5,7 +5,7 @@ const {
   isAuthenticated,
   hasPermission,
 } = require("../middlewares/authMiddleware");
-const stallController = require("../controllers/stallController");
+const stallController = require("../controllers/stallControllers");
 
 router.post(
   "/",

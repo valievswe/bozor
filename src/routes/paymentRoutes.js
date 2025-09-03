@@ -37,4 +37,10 @@ router.get(
   paymentController.getTransactionHistory
 );
 
+router.get(
+  "/transactions",
+  [isAuthenticated, hasPermission("VIEW_TRANSACTIONS")],
+  paymentController.getAllTransactions
+);
+
 module.exports = router;

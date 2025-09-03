@@ -21,9 +21,37 @@ const createStall = async (stallData) => {
   });
 };
 
-const getAllStalls = async () => {
-  return prisma.stall.findMany({
+const getAllStalls = async (searchTerm) => {
+  const whereClause = searchTerm
+    ? {
+        OR: [
+          { stallNumber: { contains: searchTerm, mode: "insensitive" } },
+          { description: { contains: searchTerm, mode: "insensitive" } },
+        ],
+      }
+    : {};
+
+  const stalls = await prisma.stall.findMany({
+    where: whereClause,
     orderBy: { stallNumber: "asc" },
+    include: {
+      _count: {
+        select: {
+          leases: {
+            where: { isActive: true },
+          },
+        },
+      },
+    },
+  });
+
+  return stalls.map((stall) => {
+    const isActiveLease = stall._count.leases > 0;
+    return {
+      ...stall,
+      status: isActiveLease ? "Band" : "Bo'sh",
+      _count: undefined,
+    };
   });
 };
 

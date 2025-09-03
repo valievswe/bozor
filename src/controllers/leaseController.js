@@ -1,5 +1,5 @@
 // src/controllers/leaseController.js
-const leaseService = require("../services/leaseService");
+const leaseService = require("../services/leaseServices");
 
 const create = async (req, res) => {
   try {
@@ -15,11 +15,13 @@ const create = async (req, res) => {
 
 const getAll = async (req, res) => {
   try {
-    const leases = await leaseService.getAllLeases();
+    const { search } = req.query;
+    const leases = await leaseService.getAllLeases(search);
     res.status(200).json(leases);
   } catch (error) {
+    console.error("Error in leaseController -> getAll:", error);
     res.status(500).json({
-      message: "Shartnomalarni olishda xatolik",
+      message: "Ijaralarni olishda xatolik",
       error: error.message,
     });
   }

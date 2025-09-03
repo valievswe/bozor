@@ -22,10 +22,20 @@ const createOwner = async (ownerData, createdByUserId) => {
     },
   });
 };
+const getAllOwners = async (searchTerm) => {
+  const whereClause = searchTerm
+    ? {
+        OR: [
+          { fullName: { contains: searchTerm, mode: "insensitive" } },
+          { tin: { contains: searchTerm, mode: "insensitive" } },
+          { phoneNumber: { contains: searchTerm, mode: "insensitive" } },
+        ],
+      }
+    : {};
 
-const getAllOwners = async () => {
   return prisma.owner.findMany({
-    orderBy: { createdAt: "desc" }, // Eng yangilari tepada
+    where: whereClause,
+    orderBy: { createdAt: "desc" },
   });
 };
 

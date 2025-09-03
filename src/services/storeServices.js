@@ -1,5 +1,18 @@
+// src/services/storeService.js
+const { PrismaClient } = require("@prisma/client");
+const prisma = new PrismaClient();
+
 const createStore = async (storeData) => {
-  const { storeNumber, area, description } = storeData;
+  // --- FIX IS HERE ---
+  // We now correctly get 'type' from the storeData object.
+  const { storeNumber, area, description, type } = storeData;
+
+  // Basic validation
+  if (!storeNumber || !area) {
+    throw new Error(
+      "Do'kon raqami (storeNumber) va maydoni (area) kiritilishi shart."
+    );
+  }
 
   // Check for duplicate store number
   const existingStore = await prisma.store.findUnique({
@@ -9,18 +22,47 @@ const createStore = async (storeData) => {
     throw new Error(`'${storeNumber}' raqamli do'kon allaqachon mavjud.`);
   }
 
+  // Now, the 'type' variable exists and can be used here.
   return prisma.store.create({
     data: {
       storeNumber,
       area,
       description,
+      type, // This will be undefined if not sent, and Prisma will use the default.
     },
   });
 };
 
-const getAllStores = async () => {
-  return prisma.store.findMany({
-    orderBy: { storeNumber: "asc" }, // Sort by store number
+const getAllStores = async (searchTerm) => {
+  const whereClause = searchTerm
+    ? {
+        OR: [
+          { storeNumber: { contains: searchTerm, mode: "insensitive" } },
+          { description: { contains: searchTerm, mode: "insensitive" } },
+        ],
+      }
+    : {};
+  const stores = await prisma.store.findMany({
+    where: whereClause,
+    orderBy: { storeNumber: "asc" },
+    include: {
+      _count: {
+        select: {
+          leases: {
+            where: { isActive: true },
+          },
+        },
+      },
+    },
+  });
+
+  return stores.map((store) => {
+    const hasActiveLease = store._count.leases > 0;
+    const { _count, ...rest } = store;
+    return {
+      ...rest,
+      status: hasActiveLease ? "Band" : "Bo'sh",
+    };
   });
 };
 
@@ -37,7 +79,6 @@ const getStoreById = async (id) => {
 const updateStore = async (id, updateData) => {
   const storeId = parseInt(id, 10);
 
-  // Check if the store exists
   const existingStore = await prisma.store.findUnique({
     where: { id: storeId },
   });
@@ -45,7 +86,6 @@ const updateStore = async (id, updateData) => {
     throw new Error("Do'kon topilmadi");
   }
 
-  // Check if the new storeNumber is already taken by another store
   if (updateData.storeNumber) {
     const duplicateStore = await prisma.store.findFirst({
       where: {
@@ -69,7 +109,6 @@ const updateStore = async (id, updateData) => {
 const deleteStore = async (id) => {
   const storeId = parseInt(id, 10);
 
-  // Check if the store is associated with any leases
   const leaseCount = await prisma.lease.count({
     where: { storeId: storeId },
   });

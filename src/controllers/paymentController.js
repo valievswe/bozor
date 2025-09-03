@@ -80,9 +80,22 @@ const getTransactionHistory = async (req, res) => {
   }
 };
 
+const getAllTransactions = async (req, res) => {
+  try {
+    const transactions = await paymentService.getAllTransactions();
+    res.status(200).json(transactions);
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to get transaction history",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   getLeaseForPayment,
   initiatePayment,
   handlePaymeCallback,
   getTransactionHistory,
+  getAllTransactions,
 };

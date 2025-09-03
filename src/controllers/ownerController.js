@@ -15,12 +15,15 @@ const create = async (req, res) => {
 
 const getAll = async (req, res) => {
   try {
-    const owners = await ownerService.getAllOwners();
+    const { search } = req.query;
+    const owners = await ownerService.getAllOwners(search);
     res.status(200).json(owners);
   } catch (error) {
+    // --- THIS IS THE IMPORTANT CHANGE ---
+    console.error("Error in getAllOwners:", error); // Log the full error to the backend console
     res.status(500).json({
-      message: "Tadbirkorlarni olishda xatolik",
-      error: error.message,
+      message: "An error occurred while fetching owners.",
+      error: error.message, // Send a cleaner message to the frontend
     });
   }
 };

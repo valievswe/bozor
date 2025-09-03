@@ -1,5 +1,5 @@
 // src/controllers/stallController.js
-const stallService = require("../services/stallService");
+const stallService = require("../services/stallServices");
 
 const create = async (req, res) => {
   try {
@@ -11,15 +11,17 @@ const create = async (req, res) => {
       .json({ message: "Rasta yaratishda xatolik", error: error.message });
   }
 };
-
 const getAll = async (req, res) => {
   try {
-    const stalls = await stallService.getAllStalls();
+    const { search } = req.query;
+    const stalls = await stallService.getAllStalls(search);
     res.status(200).json(stalls);
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Rastalarni olishda xatolik", error: error.message });
+    console.error("Error in stallController -> getAll:", error);
+    res.status(500).json({
+      message: "Rastalarni olishda xatolik",
+      error: error.message,
+    });
   }
 };
 

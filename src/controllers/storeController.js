@@ -1,5 +1,5 @@
 // src/controllers/storeController.js
-const storeService = require("../services/storeService");
+const storeService = require("../services/storeServices");
 
 const create = async (req, res) => {
   try {
@@ -14,12 +14,15 @@ const create = async (req, res) => {
 
 const getAll = async (req, res) => {
   try {
-    const stores = await storeService.getAllStores();
+    const { search } = req.query;
+    const stores = await storeService.getAllStores(search);
     res.status(200).json(stores);
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Do'konlarni olishda xatolik", error: error.message });
+    console.error("Error in storeController -> getAll:", error);
+    res.status(500).json({
+      message: "Do'konlarni olishda xatolik",
+      error: error.message,
+    });
   }
 };
 
