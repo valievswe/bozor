@@ -37,12 +37,10 @@ const createLease = async (leaseData, createdByUserId) => {
     guardFee,
     paymeKassaId,
     isActive,
-    // Connect to related models
     owner: { connect: { id: ownerId } },
     createdBy: { connect: { id: createdByUserId } },
   };
 
-  // Conditionally connect store and stall if their IDs are provided
   if (storeId) {
     dataToCreate.store = { connect: { id: storeId } };
   }
@@ -55,38 +53,54 @@ const createLease = async (leaseData, createdByUserId) => {
   });
 };
 
-const getAllLeases = async (searchTerm) => {
-  const whereClause = searchTerm
-    ? {
-        OR: [
-          { certificateNumber: { contains: searchTerm, mode: "insensitive" } },
-          {
-            owner: { fullName: { contains: searchTerm, mode: "insensitive" } },
-          },
-          {
-            store: {
-              storeNumber: { contains: searchTerm, mode: "insensitive" },
-            },
-          },
-          {
-            stall: {
-              stallNumber: { contains: searchTerm, mode: "insensitive" },
-            },
-          },
-        ],
-      }
-    : {};
+const getAllLeases = async (queryParams) => {
+  const { search, status, page = 1, limit = 10 } = queryParams;
 
-  return prisma.lease.findMany({
-    where: whereClause,
-    orderBy: { createdAt: "desc" },
-    include: {
-      owner: { select: { id: true, fullName: true, tin: true } },
-      store: { select: { id: true, storeNumber: true } },
-      stall: { select: { id: true, stallNumber: true } },
-      createdBy: { select: { id: true, firstName: true, lastName: true } },
+  const pageNum = parseInt(page, 10);
+  const limitNum = parseInt(limit, 10);
+
+  const offset = (pageNum - 1) * limitNum;
+
+  const where = {};
+  if (status === "active") {
+    where.isActive = true;
+  } else if (status === "archived") {
+    where.isActive = false;
+  }
+  if (search) {
+    where.OR = [
+      { owner: { fullName: { contains: search, mode: "insensitive" } } },
+      { store: { storeNumber: { contains: search, mode: "insensitive" } } },
+      { stall: { stallNumber: { contains: search, mode: "insensitive" } } },
+      { paymeKassaId: { contains: search, mode: "insensitive" } },
+    ];
+  }
+
+  const [leases, total] = await prisma.$transaction([
+    prisma.lease.findMany({
+      where,
+      skip: offset,
+      take: limitNum,
+      orderBy: { createdAt: "desc" },
+      include: {
+        owner: { select: { id: true, fullName: true, tin: true } },
+        store: { select: { id: true, storeNumber: true } },
+        stall: { select: { id: true, stallNumber: true } },
+        createdBy: { select: { id: true, firstName: true, lastName: true } },
+      },
+    }),
+    prisma.lease.count({ where }),
+  ]);
+
+  return {
+    data: leases,
+    meta: {
+      total,
+      page: pageNum,
+      limit: limitNum,
+      totalPages: Math.ceil(total / limitNum),
     },
-  });
+  };
 };
 
 const getLeaseById = async (id) => {
@@ -151,9 +165,60 @@ const updateLease = async (id, updateData) => {
   });
 };
 const deactivateLease = async (id) => {
+  const leaseId = parseInt(id, 10);
+  console.log(`--- SERVICE: Updating lease ${leaseId} to isActive: false ---`);
   return prisma.lease.update({
-    where: { id: parseInt(id, 10) },
+    where: { id: leaseId },
     data: { isActive: false },
+  });
+};
+
+const activateLease = async (id) => {
+  const leaseId = parseInt(id, 10);
+
+  const leaseToActivate = await prisma.lease.findUnique({
+    where: { id: leaseId },
+  });
+
+  if (!leaseToActivate) {
+    throw new Error("Ijara shartnomasi topilmadi.");
+  }
+
+  //Validation
+  if (leaseToActivate.storeId) {
+    const conflictingLease = await prisma.lease.findFirst({
+      where: {
+        storeId: leaseToActivate.storeId,
+        isActive: true,
+        id: { not: leaseId },
+      },
+    });
+    if (conflictingLease) {
+      throw new Error(
+        "Bu do'kon allaqachon boshqa faol shartnomaga biriktirilgan. Avval o'sha shartnomani arxivga jo'nating."
+      );
+    }
+  }
+
+  if (leaseToActivate.stallId) {
+    const conflictingLease = await prisma.lease.findFirst({
+      where: {
+        stallId: leaseToActivate.stallId,
+        isActive: true,
+        id: { not: leaseId },
+      },
+    });
+    if (conflictingLease) {
+      throw new Error(
+        "Bu rasta allaqachon boshqa faol shartnomaga biriktirilgan. Avval o'sha shartnomani arxivga jo'nating."
+      );
+    }
+  }
+
+  // If no conflicts, activate
+  return prisma.lease.update({
+    where: { id: leaseId },
+    data: { isActive: true },
   });
 };
 
@@ -163,4 +228,5 @@ module.exports = {
   getLeaseById,
   updateLease,
   deactivateLease,
+  activateLease,
 };

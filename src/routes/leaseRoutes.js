@@ -32,9 +32,15 @@ router.put(
 );
 
 router.patch(
-  "/:id/deactivate",
+  "/:id/archive",
   [isAuthenticated, hasPermission("DEACTIVATE_LEASE")],
   leaseController.deactivate
+);
+
+router.patch(
+  "/:id/activate",
+  [isAuthenticated, hasPermission("EDIT_LEASE")],
+  leaseController.activate
 );
 
 module.exports = router;

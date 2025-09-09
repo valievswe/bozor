@@ -15,8 +15,7 @@ const create = async (req, res) => {
 
 const getAll = async (req, res) => {
   try {
-    const { search } = req.query;
-    const leases = await leaseService.getAllLeases(search);
+    const leases = await leaseService.getAllLeases(req.query);
     res.status(200).json(leases);
   } catch (error) {
     console.error("Error in leaseController -> getAll:", error);
@@ -52,12 +51,29 @@ const update = async (req, res) => {
 };
 
 const deactivate = async (req, res) => {
+  console.log(
+    `--- CONTROLLER: Deactivating lease with ID: ${req.params.id} ---`
+  );
   try {
     const deactivatedLease = await leaseService.deactivateLease(req.params.id);
     res.status(200).json(deactivatedLease);
+    console.log("--- CONTROLLER: Deactivation successful ---");
   } catch (error) {
+    console.error("Error in leaseController -> deactivate:", error);
     res.status(400).json({
       message: "Shartnomani deaktivatsiya qilishda xatolik",
+      error: error.message,
+    });
+  }
+};
+
+const activate = async (req, res) => {
+  try {
+    const activatedLease = await leaseService.activateLease(req.params.id);
+    res.status(200).json(activatedLease);
+  } catch (error) {
+    res.status(400).json({
+      message: "Shartnomani aktivatsiya qilishda xatolik",
       error: error.message,
     });
   }
@@ -69,4 +85,5 @@ module.exports = {
   getOne,
   update,
   deactivate,
+  activate,
 };
