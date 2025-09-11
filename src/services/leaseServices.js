@@ -14,7 +14,6 @@ const createLease = async (leaseData, createdByUserId) => {
     shopMonthlyFee,
     stallMonthlyFee,
     guardFee,
-    paymeKassaId,
     isActive,
   } = leaseData;
 
@@ -35,7 +34,6 @@ const createLease = async (leaseData, createdByUserId) => {
     shopMonthlyFee,
     stallMonthlyFee,
     guardFee,
-    paymeKassaId,
     isActive,
     owner: { connect: { id: ownerId } },
     createdBy: { connect: { id: createdByUserId } },
@@ -134,7 +132,6 @@ const updateLease = async (id, updateData) => {
     shopMonthlyFee,
     stallMonthlyFee,
     guardFee,
-    paymeKassaId,
     isActive,
   } = updateData;
 
@@ -156,7 +153,6 @@ const updateLease = async (id, updateData) => {
   if (stallMonthlyFee != null)
     dataToUpdate.stallMonthlyFee = new Prisma.Decimal(stallMonthlyFee);
   if (guardFee != null) dataToUpdate.guardFee = new Prisma.Decimal(guardFee);
-  if (paymeKassaId !== undefined) dataToUpdate.paymeKassaId = paymeKassaId;
   if (isActive !== undefined) dataToUpdate.isActive = isActive;
 
   return prisma.lease.update({

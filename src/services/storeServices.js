@@ -28,7 +28,8 @@ const createStore = async (storeData) => {
       storeNumber,
       area,
       description,
-      type, // This will be undefined if not sent, and Prisma will use the default.
+      type,
+      paymeKassaId,
     },
   });
 };

@@ -65,13 +65,13 @@ model Owner {
 }
 
 model Store {
-  id          Int       @id @default(autoincrement())
-  storeNumber String    @unique
-  paymeKassaId String    @unique
-  area        Float
-  description String?
-  type        StoreType @default(SHOP)
-  leases      Lease[]
+  id           Int       @id @default(autoincrement())
+  storeNumber  String    @unique
+  paymeKassaId String?   @unique
+  area         Float
+  description  String?
+  type         StoreType @default(SHOP)
+  leases       Lease[]
 }
 
 model Stall {
