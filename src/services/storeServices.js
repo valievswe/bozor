@@ -4,13 +4,13 @@ const prisma = new PrismaClient();
 
 const createStore = async (storeData) => {
   // --- FIX IS HERE ---
-  // We now correctly get 'type' from the storeData object.
-  const { storeNumber, area, description, type } = storeData;
+  // We must destructure ALL fields we intend to use from the incoming data.
+  const { storeNumber, area, description, type, paymeKassaId } = storeData;
 
-  // Basic validation
-  if (!storeNumber || !area) {
+  // Basic validation for required fields
+  if (!storeNumber || !area || !paymeKassaId || !type) {
     throw new Error(
-      "Do'kon raqami (storeNumber) va maydoni (area) kiritilishi shart."
+      "Do'kon raqami, maydoni, Payme Kassa ID va turi kiritilishi shart."
     );
   }
 
@@ -22,7 +22,17 @@ const createStore = async (storeData) => {
     throw new Error(`'${storeNumber}' raqamli do'kon allaqachon mavjud.`);
   }
 
-  // Now, the 'type' variable exists and can be used here.
+  // Check for duplicate Payme Kassa ID
+  const existingKassa = await prisma.store.findUnique({
+    where: { paymeKassaId },
+  });
+  if (existingKassa) {
+    throw new Error(
+      "Bu Payme Kassa ID'si allaqachon boshqa do'konga tegishli."
+    );
+  }
+
+  // Now, all variables are correctly defined and can be used here.
   return prisma.store.create({
     data: {
       storeNumber,
@@ -40,9 +50,11 @@ const getAllStores = async (searchTerm) => {
         OR: [
           { storeNumber: { contains: searchTerm, mode: "insensitive" } },
           { description: { contains: searchTerm, mode: "insensitive" } },
+          { paymeKassaId: { contains: searchTerm, mode: "insensitive" } },
         ],
       }
     : {};
+
   const stores = await prisma.store.findMany({
     where: whereClause,
     orderBy: { storeNumber: "asc" },
@@ -79,24 +91,27 @@ const getStoreById = async (id) => {
 
 const updateStore = async (id, updateData) => {
   const storeId = parseInt(id, 10);
+  const { storeNumber, paymeKassaId } = updateData;
 
-  const existingStore = await prisma.store.findUnique({
-    where: { id: storeId },
-  });
-  if (!existingStore) {
-    throw new Error("Do'kon topilmadi");
-  }
-
-  if (updateData.storeNumber) {
+  if (storeNumber) {
     const duplicateStore = await prisma.store.findFirst({
       where: {
-        storeNumber: updateData.storeNumber,
+        storeNumber: storeNumber,
         id: { not: storeId },
       },
     });
     if (duplicateStore) {
+      throw new Error(`'${storeNumber}' raqamli do'kon allaqachon mavjud.`);
+    }
+  }
+
+  if (paymeKassaId) {
+    const duplicateKassa = await prisma.store.findFirst({
+      where: { paymeKassaId: paymeKassaId, id: { not: storeId } },
+    });
+    if (duplicateKassa) {
       throw new Error(
-        `'${updateData.storeNumber}' raqamli do'kon allaqachon mavjud.`
+        "Bu Payme Kassa ID'si allaqachon boshqa do'konga tegishli."
       );
     }
   }
