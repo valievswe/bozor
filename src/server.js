@@ -1,7 +1,7 @@
 // src/app.js
 
 const express = require("express");
-const mainRouter = require("./routes/index.js"); // Barcha route'larni boshqaradigan asosiy router
+const mainRouter = require("./routes/index.js");
 const cors = require("cors");
 const app = express();
 const dotenv = require("dotenv");
@@ -13,7 +13,7 @@ app.use(cors());
 
 app.get("/", (req, res) => {
   res.status(200).json({
-    message: "Bozor API is running!",
+    message: "Myrent API is running!",
     status: "OK",
   });
 });
