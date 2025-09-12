@@ -67,7 +67,7 @@ model Owner {
 model Store {
   id           Int       @id @default(autoincrement())
   storeNumber  String    @unique
-  paymeKassaId String?   @unique
+  paymeKassaId String?
   area         Float
   description  String?
   type         StoreType @default(SHOP)

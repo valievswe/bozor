@@ -22,17 +22,6 @@ const createStore = async (storeData) => {
     throw new Error(`'${storeNumber}' raqamli do'kon allaqachon mavjud.`);
   }
 
-  // Check for duplicate Payme Kassa ID
-  const existingKassa = await prisma.store.findUnique({
-    where: { paymeKassaId },
-  });
-  if (existingKassa) {
-    throw new Error(
-      "Bu Payme Kassa ID'si allaqachon boshqa do'konga tegishli."
-    );
-  }
-
-  // Now, all variables are correctly defined and can be used here.
   return prisma.store.create({
     data: {
       storeNumber,
@@ -105,16 +94,16 @@ const updateStore = async (id, updateData) => {
     }
   }
 
-  if (paymeKassaId) {
-    const duplicateKassa = await prisma.store.findFirst({
-      where: { paymeKassaId: paymeKassaId, id: { not: storeId } },
-    });
-    if (duplicateKassa) {
-      throw new Error(
-        "Bu Payme Kassa ID'si allaqachon boshqa do'konga tegishli."
-      );
-    }
-  }
+  // if (paymeKassaId) {
+  //   const duplicateKassa = await prisma.store.findFirst({
+  //     where: { paymeKassaId: paymeKassaId, id: { not: storeId } },
+  //   });
+  //   if (duplicateKassa) {
+  //     throw new Error(
+  //       "Bu Payme Kassa ID'si allaqachon boshqa do'konga tegishli."
+  //     );
+  //   }
+  // }
 
   return prisma.store.update({
     where: { id: storeId },
