@@ -4,8 +4,10 @@ const express = require("express");
 const mainRouter = require("./routes/index.js");
 const cors = require("cors");
 const app = express();
-const dotenv = require("dotenv");
-dotenv.config();
+if (process.env.NODE_ENV !== "production") {
+  require("dotenv").config();
+}
+
 const { startScheduler } = require("./utils/cron");
 
 app.use(express.json());
