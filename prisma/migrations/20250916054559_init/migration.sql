@@ -1,6 +1,3 @@
--- CreateSchema
-CREATE SCHEMA IF NOT EXISTS "public";
-
 -- CreateEnum
 CREATE TYPE "public"."StoreType" AS ENUM ('SHOP', 'WAREHOUSE', 'CONTAINER', 'OTHER');
 
@@ -68,6 +65,7 @@ CREATE TABLE "public"."Owner" (
 CREATE TABLE "public"."Store" (
     "id" SERIAL NOT NULL,
     "storeNumber" TEXT NOT NULL,
+    "paymeKassaId" TEXT,
     "area" DOUBLE PRECISION NOT NULL,
     "description" TEXT,
     "type" "public"."StoreType" NOT NULL DEFAULT 'SHOP',
@@ -108,7 +106,6 @@ CREATE TABLE "public"."Lease" (
     "shopMonthlyFee" DECIMAL(65,30),
     "stallMonthlyFee" DECIMAL(65,30),
     "guardFee" DECIMAL(65,30),
-    "paymeKassaId" TEXT NOT NULL,
     "ownerId" INTEGER NOT NULL,
     "storeId" INTEGER,
     "stallId" INTEGER,
@@ -260,9 +257,6 @@ CREATE UNIQUE INDEX "Store_storeNumber_key" ON "public"."Store"("storeNumber");
 CREATE UNIQUE INDEX "Stall_stallNumber_key" ON "public"."Stall"("stallNumber");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Lease_paymeKassaId_key" ON "public"."Lease"("paymeKassaId");
-
--- CreateIndex
 CREATE UNIQUE INDEX "auth_group_name_key" ON "public"."auth_group"("name");
 
 -- CreateIndex
@@ -390,4 +384,3 @@ ALTER TABLE "public"."django_admin_log" ADD CONSTRAINT "django_admin_log_content
 
 -- AddForeignKey
 ALTER TABLE "public"."django_admin_log" ADD CONSTRAINT "django_admin_log_user_id_c564eba6_fk_auth_user_id" FOREIGN KEY ("user_id") REFERENCES "public"."auth_user"("id") ON DELETE NO ACTION ON UPDATE NO ACTION;
-

@@ -8,28 +8,39 @@ const storeRoutes = require("./storeRoutes.js");
 const stallRoutes = require("./stallRoutes.js");
 const paymentRoutes = require("./paymentRoutes.js");
 const userRoutes = require("./userRoutes.js");
+const reportRoutes = require("./reportRoutes.js");
+const exportRoutes = require("./exportRoutes.js");
+const webhookRoutes = require("./webhookRoutes");
 
 const router = express.Router();
 
-// http://localhost:3000/api/auth/
+// http://api/auth/
 router.use("/auth", authRoutes);
 
-// http://localhost:3000/api/owners/
+// http://api/owners/
 router.use("/owners", ownerRoutes);
 
-// http://localhost:3000/api/stores/
+// http://api/stores/
 router.use("/stores", storeRoutes);
 
-// http://localhost:3000/api/leases/
+// http://api/leases/
 router.use("/leases", leaseRoutes);
 
-// http://localhost:3000/api/stalls/
+// http://api/stalls/
 router.use("/stalls", stallRoutes);
 
-// http://localhost:3000/api/payments/
+// http://api/payments/
 router.use("/payments", paymentRoutes);
 
-// http://localhost:3000/api/users/
+// http://api/users/
 router.use("/users", userRoutes);
 
+// http://api/reports/
+router.use("/reports", reportRoutes);
+
+// http://api/export/
+router.use("/export", exportRoutes);
+
+// http://api/payments/webhook/
+router.use("/payments/webhook", webhookRoutes);
 module.exports = router;

@@ -1,46 +1,17 @@
-// src/routes/paymentRoutes.js
 const express = require("express");
 const router = express.Router();
-
-const {
-  isAuthenticated,
-  hasPermission,
-} = require("../middlewares/authMiddleware");
 const paymentController = require("../controllers/paymentController");
 
-// Public endpoints (no authentication required)
-// These are used by the customer payment page
+// This file now ONLY handles the public-facing part of the payment initiation flow.
+// All routes here are PUBLIC and do not require login.
 
-// Get lease information for payment page
+// Endpoint for the tenant to find their leases by TIN/phone
+router.post("/public/find-leases", paymentController.findLeasesByOwner);
+
+// Endpoint to get details for the confirmation page
 router.get("/public/leases/:id", paymentController.getLeaseForPayment);
 
-// Initiate payment (called from customer payment page)
-router.post("/public/payments/initiate", paymentController.initiatePayment);
-
-// Payme webhook/callback (called by Payme servers)
-router.post("/payments/callback", paymentController.handlePaymeCallback);
-
-// Protected endpoints (require authentication)
-// These are for admin panel functionality
-
-// Initiate payment from admin panel (future feature)
-router.post(
-  "/payments/initiate",
-  [isAuthenticated, hasPermission("CREATE_TRANSACTION")],
-  paymentController.initiatePayment
-);
-
-// Get transaction history for a lease
-router.get(
-  "/payments/transactions/:leaseId",
-  [isAuthenticated, hasPermission("VIEW_TRANSACTIONS")],
-  paymentController.getTransactionHistory
-);
-
-router.get(
-  "/transactions",
-  [isAuthenticated, hasPermission("VIEW_TRANSACTIONS")],
-  paymentController.getAllTransactions
-);
+// Endpoint to initiate the payment and get the checkout URL from the central service
+router.post("/public/initiate", paymentController.initiatePayment);
 
 module.exports = router;
