@@ -67,10 +67,10 @@ model Owner {
 model Store {
   id           Int       @id @default(autoincrement())
   storeNumber  String    @unique
-  paymeKassaId String?
   area         Float
   description  String?
   type         StoreType @default(SHOP)
+  paymeKassaId String
   leases       Lease[]
 }
 
@@ -93,6 +93,11 @@ model Transaction {
   lease              Lease    @relation(fields: [leaseId], references: [id])
 }
 
+enum PaymentInterval {
+  DAILY
+  MONTHLY
+}
+
 model Lease {
   id                Int           @id @default(autoincrement())
   certificateNumber String?
@@ -105,6 +110,7 @@ model Lease {
   ownerId           Int
   storeId           Int?
   stallId           Int?
+  paymentInterval   PaymentInterval @default(MONTHLY)
   createdById       Int
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt

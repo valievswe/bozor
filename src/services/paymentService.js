@@ -1,14 +1,9 @@
-// src/services/paymentService.js
 const { PrismaClient, Prisma } = require("@prisma/client");
 const prisma = new PrismaClient();
 const axios = require("axios");
 
-//payment service
 const CENTRAL_PAYMENT_SERVICE_URL = process.env.CENTRAL_PAYMENT_SERVICE_URL;
 
-/**
- * Fetches public, non-sensitive lease info for payment confirmation page.
- */
 const getLeaseForPayment = async (leaseId) => {
   const lease = await prisma.lease.findUnique({
     where: { id: leaseId, isActive: true },
@@ -17,9 +12,21 @@ const getLeaseForPayment = async (leaseId) => {
       shopMonthlyFee: true,
       stallMonthlyFee: true,
       guardFee: true,
-      owner: { select: { fullName: true } },
-      store: { select: { storeNumber: true } },
-      stall: { select: { stallNumber: true } },
+      owner: {
+        select: {
+          fullName: true,
+        },
+      },
+      store: {
+        select: {
+          storeNumber: true,
+        },
+      },
+      stall: {
+        select: {
+          stallNumber: true,
+        },
+      },
     },
   });
   if (!lease) throw new Error("Faol ijara shartnomasi topilmadi.");
@@ -27,20 +34,31 @@ const getLeaseForPayment = async (leaseId) => {
     (Number(lease.shopMonthlyFee) || 0) +
     (Number(lease.stallMonthlyFee) || 0) +
     (Number(lease.guardFee) || 0);
-  return { ...lease, totalFee };
+  const responseData = {
+    ...lease,
+    totalFee,
+    ownerName: lease.owner.fullName,
+    storeNumber: lease.store?.storeNumber,
+    stallNumber: lease.stall?.stallNumber,
+  };
+  return responseData;
 };
 
-/**
- * Initiates a payment by creating a local PENDING transaction
- * and then delegating the actual payment processing to the central service.
- */
 const initiatePayment = async (leaseId, amount) => {
+  console.log(`--- [PAYMENT INITIATION STARTED] ---`);
+  console.log(
+    `Step 1: Received request for Lease ID: ${leaseId}, Amount: ${amount}`
+  );
+
   const lease = await prisma.lease.findUnique({
     where: { id: leaseId, isActive: true },
   });
-  if (!lease) throw new Error("Faol ijara shartnomasi topilmadi.");
+  if (!lease) {
+    console.error(`Step 2: FAILED. Active lease with ID ${leaseId} not found.`);
+    throw new Error("Faol ijara shartnomasi topilmadi.");
+  }
+  console.log(`Step 2: Successfully found Lease ID: ${leaseId}.`);
 
-  // 1. Create a PENDING transaction in YOUR database.
   const transaction = await prisma.transaction.create({
     data: {
       amount: new Prisma.Decimal(amount),
@@ -48,50 +66,102 @@ const initiatePayment = async (leaseId, amount) => {
       leaseId,
     },
   });
+  console.log(
+    `Step 3: Created PENDING Transaction ID: ${transaction.id} in our database.`
+  );
 
-  // 2. Prepare the data payload to send to payment service.
   const payload = {
-    contract_id: lease.id,
+    lease_id: lease.id,
+    storage_id: lease.storeId || lease.stallId,
     amount: amount,
-
-    tenant_id: process.env.TENANT_ID, // e.g., 'myrent', 'rizq-baraka'
+    tenant_id: process.env.TENANT_ID,
     callback_url: `https://${process.env.MY_DOMAIN}/api/payments/webhook/update-status`,
   };
 
-  try {
-    // 3. Call payment service.
-    console.log(
-      `Calling central payment service for Lease ID ${lease.id} with payload:`,
-      payload
+  if (!payload.storage_id) {
+    console.error(
+      `Step 4: FAILED. Lease ${leaseId} has no storeId or stallId.`
     );
-    const response = await axios.post(CENTRAL_PAYMENT_SERVICE_URL, payload);
+    throw new Error("Lease is not associated with a valid store or stall.");
+  }
+  console.log(`Step 4: Built payload for central service.`);
 
-    if (!response.data || !response.data.checkout_url) {
+  try {
+    const endpoint = `${process.env.CENTRAL_PAYMENT_SERVICE_URL}/payment/transactions/create`;
+    const requestHeaders = {
+      "Content-Type": "application/json",
+      "X-Webhook-Secret": process.env.CENTRAL_PAYMENT_SERVICE_SECRET,
+    };
+
+    console.log(`Step 5: Sending POST request to: ${endpoint}`);
+    console.log(`  -> HEADERS: ${JSON.stringify(requestHeaders)}`);
+    console.log(`  -> PAYLOAD: ${JSON.stringify(payload)}`);
+
+    const response = await axios.post(endpoint, payload, {
+      headers: requestHeaders,
+    });
+
+    console.log(`Step 6: SUCCESS. Received response from central service.`);
+    console.log(`  -> STATUS: ${response.status}`);
+    console.log(`  -> DATA: ${JSON.stringify(response.data)}`);
+
+    if (!response.data || !response.data.payme_link) {
       throw new Error(
-        "Central payment service did not return a valid checkout URL."
+        "Central payment service did not return a valid payme_link."
       );
     }
 
-    // 4. Return the checkout URL that payment service provides.
+    console.log(`--- [PAYMENT INITIATION FINISHED] ---`);
     return {
-      checkoutUrl: response.data.checkout_url,
-      transactionId: transaction.id, // internal transaction ID
+      checkoutUrl: response.data.payme_link,
+      transactionId: transaction.id,
     };
   } catch (error) {
-    // If the call to payment service fails, update transaction status as FAILED.
+    console.error(`Step 6: FAILED. Call to central service failed.`);
+    // Log the detailed error from Axios
+    if (error.response) {
+      console.error(`  -> ERROR STATUS: ${error.response.status}`);
+      console.error(`  -> ERROR DATA: ${JSON.stringify(error.response.data)}`);
+    } else {
+      console.error(`  -> ERROR MESSAGE: ${error.message}`);
+    }
+
     await prisma.transaction.update({
       where: { id: transaction.id },
       data: { status: "FAILED" },
     });
     console.error(
-      "Failed to initiate payment via central service:",
-      error.response?.data || error.message
+      `Step 7: Marked Transaction ID: ${transaction.id} as FAILED.`
     );
+    console.log(`--- [PAYMENT INITIATION FINISHED WITH ERROR] ---`);
     throw new Error("To'lov xizmati vaqtincha ishlamayapti.");
   }
+};
+const findLeasesByOwner = async (identifier) => {
+  if (!identifier)
+    throw new Error("STIR (INN) yoki telefon raqami kiritilishi shart.");
+  const owner = await prisma.owner.findFirst({
+    where: { OR: [{ tin: identifier }, { phoneNumber: identifier }] },
+  });
+  if (!owner) throw new Error("Bu ma'lumotlarga ega tadbirkor topilmadi.");
+  const leases = await prisma.lease.findMany({
+    where: { ownerId: owner.id, isActive: true },
+    select: {
+      id: true,
+      shopMonthlyFee: true,
+      store: { select: { storeNumber: true } },
+      stall: { select: { stallNumber: true } },
+    },
+  });
+  if (leases.length === 0)
+    throw new Error(
+      "Bu tadbirkorga tegishli faol ijara shartnomalari topilmadi."
+    );
+  return leases;
 };
 
 module.exports = {
   getLeaseForPayment,
   initiatePayment,
+  findLeasesByOwner,
 };

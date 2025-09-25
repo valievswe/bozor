@@ -17,10 +17,8 @@ const deactivateExpiredLeases = async () => {
     const result = await prisma.lease.updateMany({
       where: {
         isActive: true,
-        AND: {
-          expiryDate: {
-            lt: now,
-          },
+        expiryDate: {
+          lt: now,
         },
       },
       data: {
@@ -39,7 +37,6 @@ const deactivateExpiredLeases = async () => {
     console.error("[Scheduler] Error during scheduled deactivation:", error);
   }
 };
-
 /**
  * @description Initializes and starts all scheduled jobs for the application.
  */

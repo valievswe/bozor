@@ -1,3 +1,6 @@
+-- CreateSchema
+CREATE SCHEMA IF NOT EXISTS "public";
+
 -- CreateEnum
 CREATE TYPE "public"."StoreType" AS ENUM ('SHOP', 'WAREHOUSE', 'CONTAINER', 'OTHER');
 
@@ -65,10 +68,10 @@ CREATE TABLE "public"."Owner" (
 CREATE TABLE "public"."Store" (
     "id" SERIAL NOT NULL,
     "storeNumber" TEXT NOT NULL,
-    "paymeKassaId" TEXT,
     "area" DOUBLE PRECISION NOT NULL,
     "description" TEXT,
     "type" "public"."StoreType" NOT NULL DEFAULT 'SHOP',
+    "paymeKassaId" TEXT NOT NULL,
 
     CONSTRAINT "Store_pkey" PRIMARY KEY ("id")
 );
@@ -384,3 +387,4 @@ ALTER TABLE "public"."django_admin_log" ADD CONSTRAINT "django_admin_log_content
 
 -- AddForeignKey
 ALTER TABLE "public"."django_admin_log" ADD CONSTRAINT "django_admin_log_user_id_c564eba6_fk_auth_user_id" FOREIGN KEY ("user_id") REFERENCES "public"."auth_user"("id") ON DELETE NO ACTION ON UPDATE NO ACTION;
+
