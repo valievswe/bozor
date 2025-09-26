@@ -96,154 +96,156 @@ const getMonthlyReport = async (year, month) => {
   };
 };
 
-// --- getDashboardStats is also updated to use the helper function correctly ---
 const getDashboardStats = async () => {
-  const [
-    ownerCount,
-    storeCount,
-    stallCount,
-    activeLeaseCount,
-    archivedLeaseCount,
-  ] = await prisma.$transaction([
-    prisma.owner.count(),
-    prisma.store.count(),
-    prisma.stall.count(),
-    prisma.lease.count({ where: { isActive: true } }),
-    prisma.lease.count({ where: { isActive: false } }),
-  ]);
+  try {
+    const [
+      ownerCount,
+      storeCount,
+      stallCount,
+      activeLeaseCount,
+      archivedLeaseCount,
+    ] = await prisma.$transaction([
+      prisma.owner.count(),
+      prisma.store.count(),
+      prisma.stall.count(),
+      prisma.lease.count({ where: { isActive: true } }),
+      prisma.lease.count({ where: { isActive: false } }),
+    ]);
 
-  const now = new Date();
-  const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth(); // This is 0-11 for Date object
-  const currentMonthForHelper = now.getMonth() + 1; // This is 1-12 for our helper
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth(); // This is 0-11 for Date object creation
 
-  const startOfCurrentMonth = new Date(currentYear, currentMonth, 1);
-  const endOfCurrentMonth = new Date(
-    currentYear,
-    currentMonth + 1,
-    0,
-    23,
-    59,
-    59,
-    999
-  );
+    const currentMonthForHelper = currentMonth + 1;
 
-  const liableLeasesThisMonth = await prisma.lease.findMany({
-    where: {
-      OR: [
-        { isActive: true },
-        { isActive: false, updatedAt: { gte: startOfCurrentMonth } },
-      ],
-      issueDate: { lte: endOfCurrentMonth },
-    },
-    include: {
-      transactions: {
-        where: { status: "PAID", createdAt: { gte: startOfCurrentMonth } },
+    const startOfCurrentMonth = new Date(currentYear, currentMonth, 1);
+    const endOfCurrentMonth = new Date(
+      currentYear,
+      currentMonth + 1,
+      0,
+      23,
+      59,
+      59,
+      999
+    );
+
+    const liableLeasesThisMonth = await prisma.lease.findMany({
+      where: {
+        OR: [
+          { isActive: true },
+          { isActive: false, updatedAt: { gte: startOfCurrentMonth } },
+        ],
+        issueDate: { lte: endOfCurrentMonth },
       },
-      attendance: {
-        where: { date: { gte: startOfCurrentMonth, lte: endOfCurrentMonth } },
+      include: {
+        transactions: {
+          where: { status: "PAID", createdAt: { gte: startOfCurrentMonth } },
+        },
+        attendance: {
+          where: { date: { gte: startOfCurrentMonth, lte: endOfCurrentMonth } },
+        },
       },
-    },
-  });
+    });
 
-  let totalDebt = 0;
-  let monthlyIncome = 0;
-  const overdueLeasesData = [];
-  const totalWorkdaysInMonth = getWorkdayCount(
-    currentYear,
-    currentMonthForHelper
-  );
+    let totalDebt = 0;
+    let monthlyIncome = 0;
+    const overdueLeasesData = [];
 
-  for (const lease of liableLeasesThisMonth) {
-    if (lease.transactions.length > 0) {
-      lease.transactions.forEach((tx) => {
-        monthlyIncome += Number(tx.amount);
+    const totalWorkdaysInMonth = getWorkdayCount(
+      currentYear,
+      currentMonthForHelper
+    );
+
+    for (const lease of liableLeasesThisMonth) {
+      if (lease.transactions.length > 0) {
+        lease.transactions.forEach((tx) => {
+          monthlyIncome += Number(tx.amount);
+        });
+      }
+
+      if (lease.transactions.length === 0) {
+        let leaseDebt = 0;
+        if (lease.paymentInterval === "MONTHLY") {
+          leaseDebt =
+            (Number(lease.shopMonthlyFee) || 0) +
+            (Number(lease.stallMonthlyFee) || 0) +
+            (Number(lease.guardFee) || 0);
+        } else if (lease.paymentInterval === "DAILY") {
+          const absenceCount = lease.attendance.length;
+          const payableDays = totalWorkdaysInMonth - absenceCount;
+          const dailyFee =
+            (Number(lease.shopMonthlyFee) || 0) +
+            (Number(lease.stallMonthlyFee) || 0) +
+            (Number(lease.guardFee) || 0);
+          leaseDebt = payableDays * dailyFee;
+        }
+        totalDebt += leaseDebt;
+
+        if (leaseDebt > 0 && overdueLeasesData.length < 5) {
+          const owner = await prisma.owner.findUnique({
+            where: { id: lease.ownerId },
+            select: { fullName: true },
+          });
+          const store = lease.storeId
+            ? await prisma.store.findUnique({
+                where: { id: lease.storeId },
+                select: { storeNumber: true },
+              })
+            : null;
+          const stall = lease.stallId
+            ? await prisma.stall.findUnique({
+                where: { id: lease.stallId },
+                select: { stallNumber: true },
+              })
+            : null;
+          overdueLeasesData.push({ ...lease, owner, store, stall });
+        }
+      }
+    }
+
+    const monthlyChartData = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const year = d.getFullYear();
+      const month = d.getMonth() + 1; // 1-12
+      const reportData = await getMonthlyReport(year, month);
+      monthlyChartData.push({
+        month: new Date(year, month - 1).toLocaleString("default", {
+          month: "short",
+          year: "2-digit",
+        }),
+        income: reportData.totalIncome,
+        debt: reportData.totalDebt,
       });
     }
 
-    if (lease.transactions.length === 0) {
-      let leaseDebt = 0;
-      if (lease.paymentInterval === "MONTHLY") {
-        leaseDebt =
-          (Number(lease.shopMonthlyFee) || 0) +
-          (Number(lease.stallMonthlyFee) || 0) +
-          (Number(lease.guardFee) || 0);
-      } else if (lease.paymentInterval === "DAILY") {
-        const absenceCount = lease.attendance.length;
-        const payableDays = totalWorkdaysInMonth - absenceCount;
-        const dailyFee =
-          (Number(lease.shopMonthlyFee) || 0) +
-          (Number(lease.stallMonthlyFee) || 0) +
-          (Number(lease.guardFee) || 0);
-        leaseDebt = payableDays * dailyFee;
-      }
-      totalDebt += leaseDebt;
-
-      if (leaseDebt > 0 && overdueLeasesData.length < 5) {
-        const owner = await prisma.owner.findUnique({
-          where: { id: lease.ownerId },
-          select: { fullName: true },
-        });
-        const store = lease.storeId
-          ? await prisma.store.findUnique({
-              where: { id: lease.storeId },
-              select: { storeNumber: true },
-            })
-          : null;
-        const stall = lease.stallId
-          ? await prisma.stall.findUnique({
-              where: { id: lease.stallId },
-              select: { stallNumber: true },
-            })
-          : null;
-        overdueLeasesData.push({ ...lease, owner, store, stall });
-      }
-    }
-  }
-
-  // --- CHART DATA CALCULATION ---
-  // This part can also be improved to use the new getMonthlyReport function for accuracy
-  const monthlyChartData = [];
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date();
-    d.setMonth(d.getMonth() - i);
-    const year = d.getFullYear();
-    const month = d.getMonth() + 1; // 1-12
-
-    // Call our new, accurate report function
-    const reportData = await getMonthlyReport(year, month);
-
-    monthlyChartData.push({
-      month: new Date(year, month - 1).toLocaleString("default", {
-        month: "short",
-        year: "2-digit",
-      }),
-      income: reportData.totalIncome,
-      debt: reportData.totalDebt,
+    const recentTransactions = await prisma.transaction.findMany({
+      where: { status: "PAID" },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+      include: {
+        lease: { include: { owner: true, store: true, stall: true } },
+      },
     });
+
+    return {
+      keyMetrics: {
+        totalOwners: ownerCount,
+        totalAssets: storeCount + stallCount,
+        activeLeases: activeLeaseCount,
+        archivedLeases: archivedLeaseCount,
+        totalDebt: totalDebt,
+        monthlyIncome: monthlyIncome,
+      },
+      chartData: monthlyChartData,
+      recentTransactions,
+      overdueLeases: overdueLeasesData,
+    };
+  } catch (error) {
+    console.error("CRITICAL ERROR in getDashboardStats:", error);
+    throw new Error("Failed to get dashboard stats due to an internal error.");
   }
-
-  // --- RECENT TRANSACTIONS ---
-  const recentTransactions = await prisma.transaction.findMany({
-    where: { status: "PAID" },
-    orderBy: { createdAt: "desc" },
-    take: 5,
-    include: { lease: { include: { owner: true, store: true, stall: true } } },
-  });
-
-  return {
-    keyMetrics: {
-      totalOwners: ownerCount,
-      totalAssets: storeCount + stallCount,
-      activeLeases: activeLeaseCount,
-      archivedLeases: archivedLeaseCount,
-      totalDebt: totalDebt,
-      monthlyIncome: monthlyIncome,
-    },
-    chartData: monthlyChartData,
-    recentTransactions,
-    overdueLeases: overdueLeasesData,
-  };
 };
 
 module.exports = {
