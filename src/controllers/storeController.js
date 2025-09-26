@@ -14,9 +14,8 @@ const create = async (req, res) => {
 
 const getAll = async (req, res) => {
   try {
-    const { search } = req.query;
-    const stores = await storeService.getAllStores(search);
-    res.status(200).json(stores);
+    const result = await storeService.getAllStores(req.query);
+    res.status(200).json(result);
   } catch (error) {
     console.error("Error in storeController -> getAll:", error);
     res.status(500).json({

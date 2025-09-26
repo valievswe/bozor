@@ -11,6 +11,8 @@ const userRoutes = require("./userRoutes.js");
 const reportRoutes = require("./reportRoutes.js");
 const exportRoutes = require("./exportRoutes.js");
 const webhookRoutes = require("./webhookRoutes");
+const attendanceRoutes = require("./attendanceRoutes");
+const transactionRoutes = require("./transactionRoutes");
 
 const router = express.Router();
 
@@ -43,4 +45,11 @@ router.use("/export", exportRoutes);
 
 // http://api/payments/webhook/
 router.use("/payments/webhook", webhookRoutes);
+
+// http://api/attendance/
+router.use("/attendance", attendanceRoutes);
+
+// http://api/transactions/
+router.use("/transactions", transactionRoutes);
+
 module.exports = router;

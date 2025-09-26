@@ -30,6 +30,7 @@ const updatePaymentStatus = async (updateData) => {
     data: {
       status: status.toUpperCase(),
       paymeTransactionId: payme_transaction_id,
+      paymentMethod: "PAYME",
     },
   });
 

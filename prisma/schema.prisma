@@ -82,20 +82,39 @@ model Stall {
   leases      Lease[]
 }
 
+enum PaymentMethod {
+  PAYME
+  BANK_TRANSFER
+  CASH
+  OTHER
+}
+
 model Transaction {
   id                 Int      @id @default(autoincrement())
   amount             Decimal
   status             String   @default("PENDING")
   paymeTransactionId String?
   leaseId            Int
+  lease              Lease    @relation(fields: [leaseId], references: [id])
+  paymentMethod      PaymentMethod @default(PAYME)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
-  lease              Lease    @relation(fields: [leaseId], references: [id])
 }
 
 enum PaymentInterval {
   DAILY
   MONTHLY
+}
+
+model Attendance {
+  id        Int      @id @default(autoincrement())
+  date      DateTime @db.Date // The date of the absence
+  
+  leaseId   Int
+  lease     Lease    @relation(fields: [leaseId], references: [id])
+
+
+  @@unique([leaseId, date]) 
 }
 
 model Lease {
@@ -119,6 +138,7 @@ model Lease {
   stall             Stall?        @relation(fields: [stallId], references: [id])
   store             Store?        @relation(fields: [storeId], references: [id])
   transactions      Transaction[]
+  attendance        Attendance[]
 }
 
 model auth_group {

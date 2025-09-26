@@ -1,20 +1,15 @@
-// src/services/storeService.js
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 const createStore = async (storeData) => {
-  // --- FIX IS HERE ---
-  // We must destructure ALL fields we intend to use from the incoming data.
   const { storeNumber, area, description, type, paymeKassaId } = storeData;
 
-  // Basic validation for required fields
   if (!storeNumber || !area || !paymeKassaId || !type) {
     throw new Error(
       "Do'kon raqami, maydoni, Payme Kassa ID va turi kiritilishi shart."
     );
   }
 
-  // Check for duplicate store number
   const existingStore = await prisma.store.findUnique({
     where: { storeNumber },
   });
@@ -33,32 +28,39 @@ const createStore = async (storeData) => {
   });
 };
 
-const getAllStores = async (searchTerm) => {
-  const whereClause = searchTerm
+const getAllStores = async (queryParams) => {
+  // Destructure page and limit, with defaults
+  const { search, page = 1, limit = 10 } = queryParams;
+  const pageNum = parseInt(page, 10);
+  const limitNum = parseInt(limit, 10);
+  const offset = (pageNum - 1) * limitNum;
+
+  const whereClause = search
     ? {
         OR: [
-          { storeNumber: { contains: searchTerm, mode: "insensitive" } },
-          { description: { contains: searchTerm, mode: "insensitive" } },
-          { paymeKassaId: { contains: searchTerm, mode: "insensitive" } },
+          { storeNumber: { contains: search, mode: "insensitive" } },
+          { description: { contains: search, mode: "insensitive" } },
+          { paymeKassaId: { contains: search, mode: "insensitive" } },
         ],
       }
     : {};
 
-  const stores = await prisma.store.findMany({
-    where: whereClause,
-    orderBy: { storeNumber: "asc" },
-    include: {
-      _count: {
-        select: {
-          leases: {
-            where: { isActive: true },
-          },
+  const [stores, total] = await prisma.$transaction([
+    prisma.store.findMany({
+      where: whereClause,
+      skip: offset,
+      take: limitNum,
+      orderBy: { storeNumber: "asc" },
+      include: {
+        _count: {
+          select: { leases: { where: { isActive: true } } },
         },
       },
-    },
-  });
+    }),
+    prisma.store.count({ where: whereClause }),
+  ]);
 
-  return stores.map((store) => {
+  const storesWithStatus = stores.map((store) => {
     const hasActiveLease = store._count.leases > 0;
     const { _count, ...rest } = store;
     return {
@@ -66,6 +68,16 @@ const getAllStores = async (searchTerm) => {
       status: hasActiveLease ? "Band" : "Bo'sh",
     };
   });
+
+  return {
+    data: storesWithStatus,
+    meta: {
+      total,
+      page: pageNum,
+      limit: limitNum,
+      totalPages: Math.ceil(total / limitNum),
+    },
+  };
 };
 
 const getStoreById = async (id) => {

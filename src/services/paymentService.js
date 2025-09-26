@@ -4,42 +4,62 @@ const axios = require("axios");
 
 const CENTRAL_PAYMENT_SERVICE_URL = process.env.CENTRAL_PAYMENT_SERVICE_URL;
 
+const calculateLeasePaymentStatus = (lease) => {
+  if (!lease || !lease.transactions) return "UNPAID";
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth();
+  const currentDate = now.getDate();
+  if (lease.transactions.length > 0) {
+    const lastPaymentDate = new Date(lease.transactions[0].createdAt);
+    if (lease.paymentInterval === "MONTHLY") {
+      if (
+        lastPaymentDate.getFullYear() === currentYear &&
+        lastPaymentDate.getMonth() === currentMonth
+      )
+        return "PAID";
+    } else if (lease.paymentInterval === "DAILY") {
+      if (
+        lastPaymentDate.getFullYear() === currentYear &&
+        lastPaymentDate.getMonth() === currentMonth &&
+        lastPaymentDate.getDate() === currentDate
+      )
+        return "PAID";
+    }
+  }
+  return "UNPAID";
+};
+
 const getLeaseForPayment = async (leaseId) => {
   const lease = await prisma.lease.findUnique({
     where: { id: leaseId, isActive: true },
-    select: {
-      id: true,
-      shopMonthlyFee: true,
-      stallMonthlyFee: true,
-      guardFee: true,
-      owner: {
-        select: {
-          fullName: true,
-        },
-      },
-      store: {
-        select: {
-          storeNumber: true,
-        },
-      },
-      stall: {
-        select: {
-          stallNumber: true,
-        },
+    include: {
+      owner: { select: { fullName: true } },
+      store: { select: { storeNumber: true } },
+      stall: { select: { stallNumber: true } },
+      transactions: {
+        where: { status: "PAID" },
+        orderBy: { createdAt: "desc" },
+        take: 1,
       },
     },
   });
   if (!lease) throw new Error("Faol ijara shartnomasi topilmadi.");
+
   const totalFee =
     (Number(lease.shopMonthlyFee) || 0) +
     (Number(lease.stallMonthlyFee) || 0) +
     (Number(lease.guardFee) || 0);
+
+  const paymentStatus = calculateLeasePaymentStatus(lease);
+
   const responseData = {
     ...lease,
     totalFee,
     ownerName: lease.owner.fullName,
     storeNumber: lease.store?.storeNumber,
     stallNumber: lease.stall?.stallNumber,
+    paymentStatus: paymentStatus,
   };
   return responseData;
 };
@@ -52,12 +72,25 @@ const initiatePayment = async (leaseId, amount) => {
 
   const lease = await prisma.lease.findUnique({
     where: { id: leaseId, isActive: true },
+    include: {
+      transactions: {
+        where: { status: "PAID" },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
+    },
   });
-  if (!lease) {
-    console.error(`Step 2: FAILED. Active lease with ID ${leaseId} not found.`);
-    throw new Error("Faol ijara shartnomasi topilmadi.");
+
+  const paymentStatus = calculateLeasePaymentStatus(lease);
+  if (paymentStatus === "PAID") {
+    console.warn(
+      `Step 2.5: FAILED. Lease ${leaseId} is already PAID for this period.`
+    );
+    throw new Error(
+      "Bu ijara shartnomasi uchun joriy davr to'lovi allaqachon to'langan."
+    );
   }
-  console.log(`Step 2: Successfully found Lease ID: ${leaseId}.`);
+  console.log(`Step 2.5: Payment status is ${paymentStatus}. Proceeding.`);
 
   const transaction = await prisma.transaction.create({
     data: {
@@ -137,6 +170,7 @@ const initiatePayment = async (leaseId, amount) => {
     throw new Error("To'lov xizmati vaqtincha ishlamayapti.");
   }
 };
+
 const findLeasesByOwner = async (identifier) => {
   if (!identifier)
     throw new Error("STIR (INN) yoki telefon raqami kiritilishi shart.");
@@ -164,4 +198,5 @@ module.exports = {
   getLeaseForPayment,
   initiatePayment,
   findLeasesByOwner,
+  calculateLeasePaymentStatus,
 };

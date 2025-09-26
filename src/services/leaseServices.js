@@ -1,7 +1,9 @@
 const { PrismaClient, Prisma } = require("@prisma/client");
 const prisma = new PrismaClient();
 
+// --- createLease remains the same ---
 const createLease = async (leaseData, createdByUserId) => {
+  // IMPORTANT: Ensure paymentInterval is received from the form
   let {
     ownerId,
     storeId,
@@ -13,12 +15,12 @@ const createLease = async (leaseData, createdByUserId) => {
     stallMonthlyFee,
     guardFee,
     isActive,
+    paymentInterval,
   } = leaseData;
 
-  if (!ownerId) {
-    throw new Error("Tadbirkor ID (ownerId) majburiy.");
-  }
+  if (!ownerId) throw new Error("Tadbirkor ID (ownerId) majburiy.");
 
+  // (Your existing validation and data preparation logic here...)
   ownerId = parseInt(ownerId, 10);
   if (storeId) storeId = parseInt(storeId, 10);
   if (stallId) stallId = parseInt(stallId, 10);
@@ -29,6 +31,7 @@ const createLease = async (leaseData, createdByUserId) => {
   const owner = await prisma.owner.findUnique({ where: { id: ownerId } });
   if (!owner) throw new Error("Bunday tadbirkor mavjud emas.");
 
+  // (Your existing checks for conflicting leases...)
   if (storeId) {
     const store = await prisma.store.findUnique({ where: { id: storeId } });
     if (!store) throw new Error("Bunday do'kon mavjud emas.");
@@ -61,6 +64,7 @@ const createLease = async (leaseData, createdByUserId) => {
     stallMonthlyFee,
     guardFee,
     isActive,
+    paymentInterval, // <-- Add the new field here
     owner: { connect: { id: ownerId } },
     createdBy: { connect: { id: createdByUserId } },
   };
@@ -71,6 +75,7 @@ const createLease = async (leaseData, createdByUserId) => {
   return prisma.lease.create({ data: dataToCreate });
 };
 
+// --- getAllLeases is UPDATED ---
 const getAllLeases = async (queryParams) => {
   const { search, status, page = 1, limit = 10 } = queryParams;
   const pageNum = parseInt(page, 10);
@@ -78,11 +83,8 @@ const getAllLeases = async (queryParams) => {
   const offset = (pageNum - 1) * limitNum;
 
   const where = {};
-  if (status === "active") {
-    where.isActive = true;
-  } else if (status === "archived") {
-    where.isActive = false;
-  }
+  if (status === "active") where.isActive = true;
+  if (status === "archived") where.isActive = false;
 
   if (search) {
     where.OR = [
@@ -112,28 +114,43 @@ const getAllLeases = async (queryParams) => {
 
   const total = await prisma.lease.count({ where });
 
+  // --- START OF NEW PAYMENT STATUS LOGIC ---
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth();
+  const currentDate = now.getDate();
 
   const leasesWithPaymentStatus = leases.map((lease) => {
     let paymentStatus = "UNPAID";
 
     if (lease.transactions.length > 0) {
       const lastPaymentDate = new Date(lease.transactions[0].createdAt);
-      if (
-        lastPaymentDate.getFullYear() === currentYear &&
-        lastPaymentDate.getMonth() === currentMonth
-      ) {
-        paymentStatus = "PAID";
+
+      if (lease.paymentInterval === "MONTHLY") {
+        if (
+          lastPaymentDate.getFullYear() === currentYear &&
+          lastPaymentDate.getMonth() === currentMonth
+        ) {
+          paymentStatus = "PAID";
+        }
+      } else if (lease.paymentInterval === "DAILY") {
+        if (
+          lastPaymentDate.getFullYear() === currentYear &&
+          lastPaymentDate.getMonth() === currentMonth &&
+          lastPaymentDate.getDate() === currentDate
+        ) {
+          paymentStatus = "PAID";
+        }
       }
     }
 
-    const endOfMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-    const today = now.getDate();
-    if (paymentStatus === "UNPAID" && endOfMonth - today <= 5) {
-      paymentStatus = "DUE";
+    if (lease.paymentInterval === "MONTHLY" && paymentStatus === "UNPAID") {
+      const endOfMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+      if (endOfMonth - currentDate <= 5) {
+        paymentStatus = "DUE";
+      }
     }
+    // --- END OF NEW PAYMENT STATUS LOGIC ---
 
     const { transactions, ...rest } = lease;
     return { ...rest, paymentStatus };
@@ -150,26 +167,10 @@ const getAllLeases = async (queryParams) => {
   };
 };
 
-const getLeaseById = async (id) => {
-  const leaseId = parseInt(id, 10);
-  const lease = await prisma.lease.findUnique({
-    where: { id: leaseId },
-    include: {
-      owner: true,
-      store: true,
-      stall: true,
-      createdBy: { select: { firstName: true, lastName: true, email: true } },
-    },
-  });
-
-  if (!lease) {
-    throw new Error("Ijara shartnomasi topilmadi");
-  }
-  return lease;
-};
-
+// --- updateLease is UPDATED ---
 const updateLease = async (id, updateData) => {
   const leaseId = parseInt(id, 10);
+  // Destructure the new field
   let {
     ownerId,
     storeId,
@@ -181,9 +182,15 @@ const updateLease = async (id, updateData) => {
     stallMonthlyFee,
     guardFee,
     isActive,
+    paymentInterval,
   } = updateData;
 
   const dataToUpdate = {};
+  // Add the new field to the update object
+  if (paymentInterval !== undefined)
+    dataToUpdate.paymentInterval = paymentInterval;
+
+  // (Your existing update logic...)
   if (ownerId !== undefined) dataToUpdate.ownerId = parseInt(ownerId, 10);
   if (storeId !== undefined)
     dataToUpdate.storeId = storeId ? parseInt(storeId, 10) : null;
@@ -206,6 +213,24 @@ const updateLease = async (id, updateData) => {
     where: { id: leaseId },
     data: dataToUpdate,
   });
+};
+
+const getLeaseById = async (id) => {
+  const leaseId = parseInt(id, 10);
+  const lease = await prisma.lease.findUnique({
+    where: { id: leaseId },
+    include: {
+      owner: true,
+      store: true,
+      stall: true,
+      createdBy: { select: { firstName: true, lastName: true, email: true } },
+    },
+  });
+
+  if (!lease) {
+    throw new Error("Ijara shartnomasi topilmadi");
+  }
+  return lease;
 };
 
 const deactivateLease = async (id) => {
