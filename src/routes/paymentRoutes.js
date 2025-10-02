@@ -8,6 +8,9 @@ const paymentController = require("../controllers/paymentController");
 // Endpoint for the tenant to find their leases by TIN/phone
 router.post("/public/find-leases", paymentController.findLeasesByOwner);
 
+// Endpoint for public search
+router.get("/public/search", paymentController.searchPublic);
+
 // Endpoint to get details for the confirmation page
 router.get("/public/leases/:id", paymentController.getLeaseForPayment);
 

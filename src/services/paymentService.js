@@ -194,9 +194,86 @@ const findLeasesByOwner = async (identifier) => {
   return leases;
 };
 
+const searchPublicLeases = async (searchTerm) => {
+  console.log(`--- [BACKEND SEARCH] Received search term: "${searchTerm}" ---`);
+
+  if (!searchTerm || !searchTerm.trim()) {
+    return [];
+  }
+
+  const leases = await prisma.lease.findMany({
+    where: {
+      isActive: true,
+      OR: [
+        {
+          owner: {
+            fullName: {
+              contains: searchTerm,
+              mode: "insensitive",
+            },
+          },
+        },
+        {
+          owner: {
+            tin: {
+              contains: searchTerm,
+            },
+          },
+        },
+        {
+          owner: {
+            phoneNumber: {
+              contains: searchTerm,
+            },
+          },
+        },
+        {
+          store: {
+            storeNumber: {
+              contains: searchTerm,
+              mode: "insensitive",
+            },
+          },
+        },
+        {
+          stall: {
+            stallNumber: {
+              contains: searchTerm,
+              mode: "insensitive",
+            },
+          },
+        },
+      ],
+    },
+    select: {
+      id: true,
+      owner: {
+        select: {
+          fullName: true,
+          tin: true,
+        },
+      },
+      store: {
+        select: {
+          storeNumber: true,
+        },
+      },
+      stall: {
+        select: {
+          stallNumber: true,
+        },
+      },
+    },
+    take: 10,
+  });
+
+  return leases;
+};
+
 module.exports = {
   getLeaseForPayment,
   initiatePayment,
   findLeasesByOwner,
   calculateLeasePaymentStatus,
+  searchPublicLeases,
 };

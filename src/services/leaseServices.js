@@ -105,7 +105,6 @@ const getAllLeases = async (queryParams) => {
       store: { select: { storeNumber: true } },
       stall: { select: { stallNumber: true } },
       transactions: {
-        where: { status: "PAID" },
         orderBy: { createdAt: "desc" },
         take: 1,
       },
