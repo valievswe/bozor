@@ -43,8 +43,21 @@ const findLeasesByOwner = async (req, res) => {
   }
 };
 
+const searchPublic = async (req, res) => {
+  try {
+    const { term } = req.query;
+    const leases = await paymentService.searchPublicLeases(term);
+    res.status(200).json(leases);
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Qidiruvda xatolik yuz berdi.", error: error.message });
+  }
+};
+
 module.exports = {
   getLeaseForPayment,
   initiatePayment,
   findLeasesByOwner,
+  searchPublic,
 };
