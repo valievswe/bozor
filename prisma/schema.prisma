@@ -57,7 +57,7 @@ model Owner {
   phoneNumber  String?
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  updatedAt    DateTime @default(now()) @updatedAt
   createdById  Int
   tin          String   @unique
   leases       Lease[]
@@ -71,6 +71,7 @@ model Store {
   description  String?
   type         StoreType @default(SHOP)
   paymeKassaId String
+  sortKey      Int?
   leases       Lease[]
 }
 
@@ -132,7 +133,7 @@ model Lease {
   paymentInterval   PaymentInterval @default(MONTHLY)
   createdById       Int
   createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  updatedAt         DateTime      @default(now()) @updatedAt
   createdBy         User          @relation(fields: [createdById], references: [id])
   owner             Owner         @relation(fields: [ownerId], references: [id])
   stall             Stall?        @relation(fields: [stallId], references: [id])

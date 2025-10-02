@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "public"."Owner" ALTER COLUMN "updatedAt" SET DEFAULT CURRENT_TIMESTAMP;

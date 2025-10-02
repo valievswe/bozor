@@ -50,7 +50,8 @@ const getAllStores = async (queryParams) => {
       where: whereClause,
       skip: offset,
       take: limitNum,
-      orderBy: { storeNumber: "asc" },
+
+      orderBy: [{ sortKey: "asc" }, { storeNumber: "asc" }],
       include: {
         _count: {
           select: { leases: { where: { isActive: true } } },
