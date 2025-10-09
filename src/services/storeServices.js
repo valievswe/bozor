@@ -2,9 +2,9 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 const createStore = async (storeData) => {
-  const { storeNumber, area, description, type, paymeKassaId } = storeData;
+  const { storeNumber, area, description, type, kassaID } = storeData;
 
-  if (!storeNumber || !area || !paymeKassaId || !type) {
+  if (!storeNumber || !area || !kassaID || !type) {
     throw new Error(
       "Do'kon raqami, maydoni, Payme Kassa ID va turi kiritilishi shart."
     );
@@ -23,7 +23,7 @@ const createStore = async (storeData) => {
       area,
       description,
       type,
-      paymeKassaId,
+      kassaID,
     },
   });
 };
@@ -40,7 +40,7 @@ const getAllStores = async (queryParams) => {
         OR: [
           { storeNumber: { contains: search, mode: "insensitive" } },
           { description: { contains: search, mode: "insensitive" } },
-          { paymeKassaId: { contains: search, mode: "insensitive" } },
+          { kassaID: { contains: search, mode: "insensitive" } },
         ],
       }
     : {};
@@ -93,7 +93,7 @@ const getStoreById = async (id) => {
 
 const updateStore = async (id, updateData) => {
   const storeId = parseInt(id, 10);
-  const { storeNumber, paymeKassaId } = updateData;
+  const { storeNumber, kassaID } = updateData;
 
   if (storeNumber) {
     const duplicateStore = await prisma.store.findFirst({
@@ -107,9 +107,9 @@ const updateStore = async (id, updateData) => {
     }
   }
 
-  // if (paymeKassaId) {
+  // if (kassaID) {
   //   const duplicateKassa = await prisma.store.findFirst({
-  //     where: { paymeKassaId: paymeKassaId, id: { not: storeId } },
+  //     where: { kassaID: kassaID, id: { not: storeId } },
   //   });
   //   if (duplicateKassa) {
   //     throw new Error(
