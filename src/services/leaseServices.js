@@ -99,7 +99,7 @@ const getAllLeases = async (queryParams) => {
     where,
     skip: offset,
     take: limitNum,
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ storeId: "asc" }, { stallId: "asc" }],
     include: {
       owner: { select: { fullName: true } },
       store: { select: { storeNumber: true } },
