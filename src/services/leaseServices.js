@@ -91,7 +91,7 @@ const getAllLeases = async (queryParams) => {
     where.OR = [
       { owner: { fullName: { contains: search, mode: "insensitive" } } },
       { store: { storeNumber: { contains: search, mode: "insensitive" } } },
-      { store: { paymeKassaId: { contains: search, mode: "insensitive" } } },
+      { store: { kassaID: { contains: search, mode: "insensitive" } } },
       { stall: { stallNumber: { contains: search, mode: "insensitive" } } },
     ];
   }
