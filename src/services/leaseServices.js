@@ -1,5 +1,6 @@
 const { PrismaClient, Prisma } = require("@prisma/client");
 const prisma = new PrismaClient();
+const { calculateLeasePaymentStatus } = require("./paymentService");
 
 // --- createLease remains the same ---
 const createLease = async (leaseData, createdByUserId) => {
@@ -119,41 +120,51 @@ const getAllLeases = async (queryParams) => {
   const currentMonth = now.getMonth();
   const currentDate = now.getDate();
 
-  const leasesWithPaymentStatus = leases.map((lease) => {
-    let paymentStatus = "UNPAID";
+  const leasesWithPaymentStatus = await Promise.all(
+    leases.map(async (lease) => {
+      // Get attendance count for current month (for daily payment interval)
+      const attendanceCount = await prisma.attendance.count({
+        where: {
+          leaseId: lease.id,
+          date: {
+            gte: new Date(currentYear, currentMonth, 1),
+            lt: new Date(currentYear, currentMonth + 1, 1),
+          },
+        },
+      });
 
-    if (lease.transactions.length > 0) {
-      const lastPaymentDate = new Date(lease.transactions[0].createdAt);
+      // Include ALL transactions for proper calculation
+      const leaseWithAllTransactions = {
+        ...lease,
+        transactions: await prisma.transaction.findMany({
+          where: {
+            leaseId: lease.id,
+            status: "PAID",
+            createdAt: {
+              gte: new Date(currentYear, currentMonth, 1),
+              lt: new Date(currentYear, currentMonth + 1, 1),
+            },
+          },
+        }),
+      };
 
-      if (lease.paymentInterval === "MONTHLY") {
-        if (
-          lastPaymentDate.getFullYear() === currentYear &&
-          lastPaymentDate.getMonth() === currentMonth
-        ) {
-          paymentStatus = "PAID";
-        }
-      } else if (lease.paymentInterval === "DAILY") {
-        if (
-          lastPaymentDate.getFullYear() === currentYear &&
-          lastPaymentDate.getMonth() === currentMonth &&
-          lastPaymentDate.getDate() === currentDate
-        ) {
-          paymentStatus = "PAID";
+      let paymentStatus = calculateLeasePaymentStatus(
+        leaseWithAllTransactions,
+        attendanceCount
+      );
+
+      // Add "DUE" status for monthly payments nearing end of month
+      if (lease.paymentInterval === "MONTHLY" && paymentStatus === "UNPAID") {
+        const endOfMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+        if (endOfMonth - currentDate <= 5) {
+          paymentStatus = "DUE";
         }
       }
-    }
 
-    if (lease.paymentInterval === "MONTHLY" && paymentStatus === "UNPAID") {
-      const endOfMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-      if (endOfMonth - currentDate <= 5) {
-        paymentStatus = "DUE";
-      }
-    }
-    // --- END OF NEW PAYMENT STATUS LOGIC ---
-
-    const { transactions, ...rest } = lease;
-    return { ...rest, paymentStatus };
-  });
+      const { transactions, ...rest } = lease;
+      return { ...rest, paymentStatus };
+    })
+  );
 
   return {
     data: leasesWithPaymentStatus,

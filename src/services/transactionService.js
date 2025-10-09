@@ -3,6 +3,7 @@ const prismaClientPackage = require("@prisma/client");
 
 const Prisma = prismaClientPackage.Prisma;
 const prisma = new prismaClientPackage.PrismaClient();
+const { calculateLeasePaymentStatus } = require("./paymentService");
 /**
  * @description Creates a new transaction record manually.
  *              This is for offline payments like cash or bank transfer.
@@ -30,11 +31,44 @@ const createManualTransaction = async (transactionData) => {
   }
 
   // 2. --- Verify that the lease exists and is active ---
+  const targetDate = paymentDate ? new Date(paymentDate) : new Date();
+  const targetYear = targetDate.getFullYear();
+  const targetMonth = targetDate.getMonth();
+
   const lease = await prisma.lease.findUnique({
     where: { id: parseInt(leaseId, 10), isActive: true },
+    include: {
+      transactions: {
+        where: {
+          status: "PAID",
+          createdAt: {
+            gte: new Date(targetYear, targetMonth, 1),
+            lt: new Date(targetYear, targetMonth + 1, 1),
+          },
+        },
+      },
+      attendance: {
+        where: {
+          date: {
+            gte: new Date(targetYear, targetMonth, 1),
+            lt: new Date(targetYear, targetMonth + 1, 1),
+          },
+        },
+      },
+    },
   });
   if (!lease) {
     throw new Error("Bu ID'ga ega faol ijara shartnomasi topilmadi.");
+  }
+
+  // 2.5 --- Check if already paid for this period ---
+  const attendanceCount = lease.attendance?.length || 0;
+  const paymentStatus = calculateLeasePaymentStatus(lease, attendanceCount);
+
+  if (paymentStatus === "PAID") {
+    throw new Error(
+      "Bu ijara shartnomasi uchun ushbu davr to'lovi allaqachon to'langan."
+    );
   }
 
   // 3. --- Create the transaction. It's immediately marked as PAID. ---

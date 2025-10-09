@@ -4,29 +4,73 @@ const axios = require("axios");
 
 const CENTRAL_PAYMENT_SERVICE_URL = process.env.CENTRAL_PAYMENT_SERVICE_URL;
 
-const calculateLeasePaymentStatus = (lease) => {
+// Helper function to calculate expected payment amount for a lease
+const calculateExpectedPayment = (lease, attendanceCount = 0) => {
+  const totalFee =
+    (Number(lease.shopMonthlyFee) || 0) +
+    (Number(lease.stallMonthlyFee) || 0) +
+    (Number(lease.guardFee) || 0);
+
+  if (lease.paymentInterval === "DAILY") {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+
+    // Calculate workdays in current month (Mon-Sat)
+    let workdays = 0;
+    const date = new Date(year, month, 1);
+    while (date.getMonth() === month) {
+      const dayOfWeek = date.getDay();
+      if (dayOfWeek !== 0) workdays++; // Not Sunday
+      date.setDate(date.getDate() + 1);
+    }
+
+    const payableDays = workdays - attendanceCount;
+    return totalFee * payableDays;
+  }
+
+  return totalFee; // MONTHLY
+};
+
+const calculateLeasePaymentStatus = (lease, attendanceCount = 0) => {
   if (!lease || !lease.transactions) return "UNPAID";
+
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth();
   const currentDate = now.getDate();
-  if (lease.transactions.length > 0) {
-    const lastPaymentDate = new Date(lease.transactions[0].createdAt);
-    if (lease.paymentInterval === "MONTHLY") {
-      if (
-        lastPaymentDate.getFullYear() === currentYear &&
-        lastPaymentDate.getMonth() === currentMonth
-      )
-        return "PAID";
-    } else if (lease.paymentInterval === "DAILY") {
-      if (
-        lastPaymentDate.getFullYear() === currentYear &&
-        lastPaymentDate.getMonth() === currentMonth &&
-        lastPaymentDate.getDate() === currentDate
-      )
-        return "PAID";
-    }
+
+  // Calculate expected amount
+  const expectedAmount = calculateExpectedPayment(lease, attendanceCount);
+
+  if (lease.paymentInterval === "MONTHLY") {
+    // Sum all PAID transactions for current month
+    const totalPaidThisMonth = lease.transactions
+      .filter(tx => {
+        const txDate = new Date(tx.createdAt);
+        return (
+          txDate.getFullYear() === currentYear &&
+          txDate.getMonth() === currentMonth
+        );
+      })
+      .reduce((sum, tx) => sum + Number(tx.amount), 0);
+
+    if (totalPaidThisMonth >= expectedAmount) return "PAID";
+
+  } else if (lease.paymentInterval === "DAILY") {
+    // Check if payment made today
+    const paidToday = lease.transactions.some(tx => {
+      const txDate = new Date(tx.createdAt);
+      return (
+        txDate.getFullYear() === currentYear &&
+        txDate.getMonth() === currentMonth &&
+        txDate.getDate() === currentDate
+      );
+    });
+
+    if (paidToday) return "PAID";
   }
+
   return "UNPAID";
 };
 
@@ -70,27 +114,81 @@ const initiatePayment = async (leaseId, amount) => {
     `Step 1: Received request for Lease ID: ${leaseId}, Amount: ${amount}`
   );
 
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth();
+
   const lease = await prisma.lease.findUnique({
     where: { id: leaseId, isActive: true },
     include: {
       transactions: {
         where: { status: "PAID" },
         orderBy: { createdAt: "desc" },
-        take: 1,
+      },
+      attendance: {
+        where: {
+          date: {
+            gte: new Date(currentYear, currentMonth, 1),
+            lt: new Date(currentYear, currentMonth + 1, 1),
+          },
+        },
       },
     },
   });
 
-  const paymentStatus = calculateLeasePaymentStatus(lease);
+  if (!lease) {
+    throw new Error("Faol ijara shartnomasi topilmadi.");
+  }
+
+  // Step 2: Check if already paid this period
+  const attendanceCount = lease.attendance?.length || 0;
+  const paymentStatus = calculateLeasePaymentStatus(lease, attendanceCount);
   if (paymentStatus === "PAID") {
     console.warn(
-      `Step 2.5: FAILED. Lease ${leaseId} is already PAID for this period.`
+      `Step 2: FAILED. Lease ${leaseId} is already PAID for this period.`
     );
     throw new Error(
       "Bu ijara shartnomasi uchun joriy davr to'lovi allaqachon to'langan."
     );
   }
-  console.log(`Step 2.5: Payment status is ${paymentStatus}. Proceeding.`);
+  console.log(`Step 2: Payment status is ${paymentStatus}. Proceeding.`);
+
+  // Step 3: Validate payment amount
+  const expectedAmount = calculateExpectedPayment(lease, attendanceCount);
+  if (Number(amount) < expectedAmount) {
+    console.warn(
+      `Step 3: FAILED. Amount ${amount} is less than expected ${expectedAmount}`
+    );
+    throw new Error(
+      `To'lov summasi kutilganidan kam. Kerakli summa: ${expectedAmount} UZS`
+    );
+  }
+  console.log(`Step 3: Amount validated. Expected: ${expectedAmount}, Received: ${amount}`);
+
+  // Step 4: Check for existing PENDING transaction
+  const existingPending = await prisma.transaction.findFirst({
+    where: {
+      leaseId: leaseId,
+      status: "PENDING",
+      createdAt: {
+        gte: new Date(currentYear, currentMonth, 1),
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (existingPending) {
+    console.log(
+      `Step 4: Found existing PENDING transaction ${existingPending.id}. Reusing it.`
+    );
+    // Return existing transaction instead of creating new one
+    return {
+      checkoutUrl: null, // Will need to regenerate or store in DB
+      transactionId: existingPending.id,
+      message: "Mavjud kutilayotgan to'lov topildi.",
+    };
+  }
+  console.log(`Step 4: No existing PENDING transaction found.`);
 
   const transaction = await prisma.transaction.create({
     data: {
@@ -100,7 +198,7 @@ const initiatePayment = async (leaseId, amount) => {
     },
   });
   console.log(
-    `Step 3: Created PENDING Transaction ID: ${transaction.id} in our database.`
+    `Step 5: Created PENDING Transaction ID: ${transaction.id} in our database.`
   );
 
   const payload = {
@@ -113,11 +211,11 @@ const initiatePayment = async (leaseId, amount) => {
 
   if (!payload.storage_id) {
     console.error(
-      `Step 4: FAILED. Lease ${leaseId} has no storeId or stallId.`
+      `Step 6: FAILED. Lease ${leaseId} has no storeId or stallId.`
     );
     throw new Error("Lease is not associated with a valid store or stall.");
   }
-  console.log(`Step 4: Built payload for central service.`);
+  console.log(`Step 6: Built payload for central service.`);
 
   try {
     const endpoint = `${process.env.CENTRAL_PAYMENT_SERVICE_URL}/payment/transactions/create`;
@@ -126,7 +224,7 @@ const initiatePayment = async (leaseId, amount) => {
       "X-Webhook-Secret": process.env.CENTRAL_PAYMENT_SERVICE_SECRET,
     };
 
-    console.log(`Step 5: Sending POST request to: ${endpoint}`);
+    console.log(`Step 7: Sending POST request to: ${endpoint}`);
     console.log(`  -> HEADERS: ${JSON.stringify(requestHeaders)}`);
     console.log(`  -> PAYLOAD: ${JSON.stringify(payload)}`);
 
@@ -134,7 +232,7 @@ const initiatePayment = async (leaseId, amount) => {
       headers: requestHeaders,
     });
 
-    console.log(`Step 6: SUCCESS. Received response from central service.`);
+    console.log(`Step 8: SUCCESS. Received response from central service.`);
     console.log(`  -> STATUS: ${response.status}`);
     console.log(`  -> DATA: ${JSON.stringify(response.data)}`);
 
@@ -150,7 +248,7 @@ const initiatePayment = async (leaseId, amount) => {
       transactionId: transaction.id,
     };
   } catch (error) {
-    console.error(`Step 6: FAILED. Call to central service failed.`);
+    console.error(`Step 9: FAILED. Call to central service failed.`);
     // Log the detailed error from Axios
     if (error.response) {
       console.error(`  -> ERROR STATUS: ${error.response.status}`);
@@ -164,7 +262,7 @@ const initiatePayment = async (leaseId, amount) => {
       data: { status: "FAILED" },
     });
     console.error(
-      `Step 7: Marked Transaction ID: ${transaction.id} as FAILED.`
+      `Step 10: Marked Transaction ID: ${transaction.id} as FAILED.`
     );
     console.log(`--- [PAYMENT INITIATION FINISHED WITH ERROR] ---`);
     throw new Error("To'lov xizmati vaqtincha ishlamayapti.");
@@ -275,5 +373,6 @@ module.exports = {
   initiatePayment,
   findLeasesByOwner,
   calculateLeasePaymentStatus,
+  calculateExpectedPayment,
   searchPublicLeases,
 };

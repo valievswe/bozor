@@ -1,6 +1,7 @@
 // src/services/reportService.js
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
+const { calculateExpectedPayment } = require("./paymentService");
 
 // Helper function to count workdays (Mon-Sat) in a given month
 function getWorkdayCount(year, month) {
@@ -15,6 +16,81 @@ function getWorkdayCount(year, month) {
     date.setUTCDate(date.getUTCDate() + 1);
   }
   return count;
+}
+
+// NEW: Calculate cumulative debt for a single lease across all unpaid months
+async function calculateCumulativeDebtForLease(lease, upToDate = new Date()) {
+  const issueDate = new Date(lease.issueDate);
+  const endDate = lease.expiryDate ? new Date(lease.expiryDate) : upToDate;
+  const finalDate = endDate > upToDate ? upToDate : endDate;
+
+  let totalDebt = 0;
+  const currentDate = new Date(issueDate);
+  currentDate.setDate(1); // Start from first day of issue month
+
+  // Loop through each month from issue date to now
+  while (currentDate <= finalDate) {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+
+    const monthStart = new Date(year, month, 1);
+    const monthEnd = new Date(year, month + 1, 0, 23, 59, 59, 999);
+
+    // Get all PAID transactions for this specific month
+    const paidTransactions = await prisma.transaction.findMany({
+      where: {
+        leaseId: lease.id,
+        status: "PAID",
+        createdAt: {
+          gte: monthStart,
+          lte: monthEnd,
+        },
+      },
+    });
+
+    const totalPaidThisMonth = paidTransactions.reduce(
+      (sum, tx) => sum + Number(tx.amount),
+      0
+    );
+
+    // Get attendance for this month (for daily payment interval)
+    const attendanceCount = await prisma.attendance.count({
+      where: {
+        leaseId: lease.id,
+        date: {
+          gte: monthStart,
+          lte: monthEnd,
+        },
+      },
+    });
+
+    // Calculate expected payment for this month
+    let expectedAmount = 0;
+    if (lease.paymentInterval === "MONTHLY") {
+      expectedAmount =
+        (Number(lease.shopMonthlyFee) || 0) +
+        (Number(lease.stallMonthlyFee) || 0) +
+        (Number(lease.guardFee) || 0);
+    } else if (lease.paymentInterval === "DAILY") {
+      const workdaysInMonth = getWorkdayCount(year, month + 1);
+      const payableDays = workdaysInMonth - attendanceCount;
+      const dailyFee =
+        (Number(lease.shopMonthlyFee) || 0) +
+        (Number(lease.stallMonthlyFee) || 0) +
+        (Number(lease.guardFee) || 0);
+      expectedAmount = payableDays * dailyFee;
+    }
+
+    // If paid less than expected, add difference to debt
+    if (totalPaidThisMonth < expectedAmount) {
+      totalDebt += expectedAmount - totalPaidThisMonth;
+    }
+
+    // Move to next month
+    currentDate.setMonth(currentDate.getMonth() + 1);
+  }
+
+  return totalDebt;
 }
 
 const getDailyReport = async (date) => {
@@ -50,16 +126,12 @@ const getMonthlyReport = async (year, month) => {
     where: { status: "PAID", createdAt: { gte: startDate, lte: endDate } },
   });
 
-  // 2. Calculate Total Debt for the month (this is the new logic)
+  // 2. Calculate Total Debt for the month
   const liableLeases = await prisma.lease.findMany({
     where: {
       // Find leases that were active at any point during this month
       issueDate: { lte: endDate },
       OR: [{ expiryDate: null }, { expiryDate: { gte: startDate } }],
-    },
-    include: {
-      transactions: { where: { createdAt: { gte: startDate, lte: endDate } } },
-      attendance: { where: { date: { gte: startDate, lte: endDate } } },
     },
   });
 
@@ -67,24 +139,47 @@ const getMonthlyReport = async (year, month) => {
   const totalWorkdaysInMonth = getWorkdayCount(year, month);
 
   for (const lease of liableLeases) {
-    // Only calculate debt if there were no paid transactions in that month
-    if (lease.transactions.length === 0) {
-      let leaseDebt = 0;
-      if (lease.paymentInterval === "MONTHLY") {
-        leaseDebt =
-          (Number(lease.shopMonthlyFee) || 0) +
-          (Number(lease.stallMonthlyFee) || 0) +
-          (Number(lease.guardFee) || 0);
-      } else if (lease.paymentInterval === "DAILY") {
-        const absenceCount = lease.attendance.length;
-        const payableDays = totalWorkdaysInMonth - absenceCount;
-        const dailyFee =
-          (Number(lease.shopMonthlyFee) || 0) +
-          (Number(lease.stallMonthlyFee) || 0) +
-          (Number(lease.guardFee) || 0);
-        leaseDebt = payableDays * dailyFee;
-      }
-      totalDebtForMonth += leaseDebt;
+    // Get PAID transactions for THIS specific month
+    const paidTransactionsThisMonth = await prisma.transaction.findMany({
+      where: {
+        leaseId: lease.id,
+        status: "PAID",
+        createdAt: { gte: startDate, lte: endDate },
+      },
+    });
+
+    const totalPaidThisMonth = paidTransactionsThisMonth.reduce(
+      (sum, tx) => sum + Number(tx.amount),
+      0
+    );
+
+    // Get attendance count for this month
+    const attendanceCount = await prisma.attendance.count({
+      where: {
+        leaseId: lease.id,
+        date: { gte: startDate, lte: endDate },
+      },
+    });
+
+    // Calculate expected amount for this month
+    let expectedAmount = 0;
+    if (lease.paymentInterval === "MONTHLY") {
+      expectedAmount =
+        (Number(lease.shopMonthlyFee) || 0) +
+        (Number(lease.stallMonthlyFee) || 0) +
+        (Number(lease.guardFee) || 0);
+    } else if (lease.paymentInterval === "DAILY") {
+      const payableDays = totalWorkdaysInMonth - attendanceCount;
+      const dailyFee =
+        (Number(lease.shopMonthlyFee) || 0) +
+        (Number(lease.stallMonthlyFee) || 0) +
+        (Number(lease.guardFee) || 0);
+      expectedAmount = payableDays * dailyFee;
+    }
+
+    // If paid less than expected, add difference to debt
+    if (totalPaidThisMonth < expectedAmount) {
+      totalDebtForMonth += expectedAmount - totalPaidThisMonth;
     }
   }
 
@@ -137,51 +232,33 @@ const getDashboardStats = async () => {
         ],
         issueDate: { lte: endOfCurrentMonth },
       },
-      include: {
-        transactions: {
-          where: { status: "PAID", createdAt: { gte: startOfCurrentMonth } },
-        },
-        attendance: {
-          where: { date: { gte: startOfCurrentMonth, lte: endOfCurrentMonth } },
-        },
+    });
+
+    // Calculate income for current month
+    const incomeTransactions = await prisma.transaction.findMany({
+      where: {
+        status: "PAID",
+        createdAt: { gte: startOfCurrentMonth, lte: endOfCurrentMonth },
       },
     });
 
-    let totalDebt = 0;
-    let monthlyIncome = 0;
-    const overdueLeasesData = [];
-
-    const totalWorkdaysInMonth = getWorkdayCount(
-      currentYear,
-      currentMonthForHelper
+    let monthlyIncome = incomeTransactions.reduce(
+      (sum, tx) => sum + Number(tx.amount),
+      0
     );
 
+    let totalDebt = 0;
+    const overdueLeasesData = [];
+
+    // Calculate CUMULATIVE debt for each lease (not just current month!)
     for (const lease of liableLeasesThisMonth) {
-      if (lease.transactions.length > 0) {
-        lease.transactions.forEach((tx) => {
-          monthlyIncome += Number(tx.amount);
-        });
-      }
+      const cumulativeDebt = await calculateCumulativeDebtForLease(lease, now);
 
-      if (lease.transactions.length === 0) {
-        let leaseDebt = 0;
-        if (lease.paymentInterval === "MONTHLY") {
-          leaseDebt =
-            (Number(lease.shopMonthlyFee) || 0) +
-            (Number(lease.stallMonthlyFee) || 0) +
-            (Number(lease.guardFee) || 0);
-        } else if (lease.paymentInterval === "DAILY") {
-          const absenceCount = lease.attendance.length;
-          const payableDays = totalWorkdaysInMonth - absenceCount;
-          const dailyFee =
-            (Number(lease.shopMonthlyFee) || 0) +
-            (Number(lease.stallMonthlyFee) || 0) +
-            (Number(lease.guardFee) || 0);
-          leaseDebt = payableDays * dailyFee;
-        }
-        totalDebt += leaseDebt;
+      if (cumulativeDebt > 0) {
+        totalDebt += cumulativeDebt;
 
-        if (leaseDebt > 0 && overdueLeasesData.length < 5) {
+        // Add to overdue list (top 5)
+        if (overdueLeasesData.length < 5) {
           const owner = await prisma.owner.findUnique({
             where: { id: lease.ownerId },
             select: { fullName: true },
@@ -198,7 +275,13 @@ const getDashboardStats = async () => {
                 select: { stallNumber: true },
               })
             : null;
-          overdueLeasesData.push({ ...lease, owner, store, stall });
+          overdueLeasesData.push({
+            ...lease,
+            owner,
+            store,
+            stall,
+            debt: cumulativeDebt,
+          });
         }
       }
     }
@@ -252,4 +335,5 @@ module.exports = {
   getDailyReport,
   getMonthlyReport,
   getDashboardStats,
+  calculateCumulativeDebtForLease,
 };
