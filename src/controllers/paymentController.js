@@ -10,7 +10,7 @@ const getLeaseForPayment = async (req, res) => {
     );
     res.status(200).json(leaseInfo);
   } catch (error) {
-    res
+    resfoiz
       .status(404)
       .json({ message: "Lease not found or not active", error: error.message });
   }
@@ -18,13 +18,17 @@ const getLeaseForPayment = async (req, res) => {
 
 const initiatePayment = async (req, res) => {
   try {
-    const { leaseId, amount } = req.body;
+    const { leaseId, amount, payment_method } = req.body;
     if (!leaseId || !amount) {
       return res
         .status(400)
         .json({ message: "Lease ID and amount are required" });
     }
-    const result = await paymentService.initiatePayment(leaseId, amount);
+    const result = await paymentService.initiatePayment(
+      leaseId,
+      amount,
+      payment_method
+    );
     res.status(200).json(result);
   } catch (error) {
     res

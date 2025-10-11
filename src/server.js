@@ -16,7 +16,7 @@ app.use(cors());
 app.get("/", (req, res) => {
   res.status(200).json({
     message: "Myrent API is running!",
-    status: "OK",
+    status: "OK", 
   });
 });
 
