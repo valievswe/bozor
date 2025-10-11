@@ -188,7 +188,9 @@ const initiatePayment = async (leaseId, amount) => {
     await prisma.transaction.delete({
       where: { id: existingPending.id },
     });
-    console.log(`Step 4.5: Deleted old PENDING transaction ${existingPending.id}.`);
+    console.log(
+      `Step 4.5: Deleted old PENDING transaction ${existingPending.id}.`
+    );
   } else {
     console.log(`Step 4: No existing PENDING transaction found.`);
   }
@@ -221,10 +223,11 @@ const initiatePayment = async (leaseId, amount) => {
   }
 
   const payload = {
-    lease_id: lease.id,
-    storage_id: storageId,
-    amount: amount,
     tenant_id: process.env.TENANT_ID,
+    storage_id: storageId,
+    lease_id: lease.id,
+    amount: amount,
+    payment_method: "click",
     callback_url: `https://${process.env.MY_DOMAIN}/api/payments/webhook/update-status`,
   };
   console.log(`Step 6: Built payload for central service.`);
