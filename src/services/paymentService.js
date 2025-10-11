@@ -167,20 +167,22 @@ const initiatePayment = async (leaseId, amount, payment_method = "CLICK") => {
   });
 
   let storageId;
-  if (lease.storeId && lease.store) storageId = lease.store.kassaID;
-  else if (lease.stallId && lease.stall)
+  if (lease.storeId && lease.store) {
+    const kassaId = lease.store.kassaID;
+    storageId = !isNaN(kassaId) ? parseInt(kassaId, 10) : kassaId;
+  } else if (lease.stallId && lease.stall) {
     storageId = lease.stall.stallNumber || `STALL_${lease.stallId}`;
+  }
   if (!storageId)
     throw new Error("Lease is not associated with a valid store or stall.");
 
   try {
     const payload = {
-      lease_id: lease.id,
-      storage_id: storageId,
-      amount,
       tenant_id: process.env.TENANT_ID,
-      payment_method: payment_method.toUpperCase(),
-      callback_url: `https://${process.env.MY_DOMAIN}/api/payments/webhook/update-status`,
+      storage_id: parseInt(storageId, 10),
+      lease_id: lease.id,
+      amount: parseInt(amount, 10),
+      payment_method: payment_method.toLowerCase(),
     };
 
     const headers = {
@@ -193,7 +195,6 @@ const initiatePayment = async (leaseId, amount, payment_method = "CLICK") => {
       JSON.stringify(payload, null, 2)
     );
 
-    // Use single endpoint for all payment methods
     const response = await axios.post(
       `${process.env.CENTRAL_PAYMENT_SERVICE_URL}/payment/transactions/create`,
       payload,
@@ -205,18 +206,17 @@ const initiatePayment = async (leaseId, amount, payment_method = "CLICK") => {
       JSON.stringify(response.data, null, 2)
     );
 
-    // Extract the correct link based on payment method
     let paymentUrl;
-    const normalizedMethod = payment_method.toUpperCase();
+    const normalizedMethod = payment_method.toLowerCase();
 
-    if (normalizedMethod === "PAYME") {
+    if (normalizedMethod === "payme") {
       if (!response.data?.payme_link) {
         throw new Error(
           "Invalid response from payment service - no payme_link"
         );
       }
       paymentUrl = response.data.payme_link;
-    } else if (normalizedMethod === "CLICK") {
+    } else if (normalizedMethod === "click") {
       if (!response.data?.click_link) {
         throw new Error(
           "Invalid response from payment service - no click_link"
