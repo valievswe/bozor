@@ -162,7 +162,7 @@ const initiatePayment = async (leaseId, amount, payment_method = "PAYME") => {
       amount: new Prisma.Decimal(amount),
       status: "PENDING",
       leaseId,
-      provider: payment_method,
+      paymentMethod: payment_method,
     },
   });
 
