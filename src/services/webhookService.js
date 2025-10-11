@@ -5,12 +5,23 @@ const updatePaymentStatus = async (updateData) => {
   // Support multiple field name variations from central service
   const contract_id = updateData.contract_id || updateData.lease_id;
   const status = updateData.status || updateData.payment_status;
-  const payme_transaction_id = updateData.payme_transaction_id || updateData.transaction_id || updateData.payme_id;
+  const payme_transaction_id =
+    updateData.payme_transaction_id ||
+    updateData.transaction_id ||
+    updateData.payme_id;
+  const method = updateData.method || updateData.payment_method;
 
-  console.log(`[Webhook Service] Received data:`, JSON.stringify(updateData, null, 2));
+  console.log(
+    `[Webhook Service] Received data:`,
+    JSON.stringify(updateData, null, 2)
+  );
 
   if (!contract_id || !status) {
-    throw new Error(`Webhook data is missing 'contract_id'/'lease_id' or 'status'. Received: ${JSON.stringify(updateData)}`);
+    throw new Error(
+      `Webhook data is missing 'contract_id'/'lease_id' or 'status'. Received: ${JSON.stringify(
+        updateData
+      )}`
+    );
   }
 
   const leaseId = parseInt(contract_id, 10);
@@ -35,7 +46,7 @@ const updatePaymentStatus = async (updateData) => {
     data: {
       status: status.toUpperCase(),
       paymeTransactionId: payme_transaction_id,
-      paymentMethod: "PAYME",
+      paymentMethod: method.toUpperCase(),
     },
   });
 
