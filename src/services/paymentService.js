@@ -174,7 +174,6 @@ const initiatePayment = async (leaseId, amount, payment_method = "CLICK") => {
     throw new Error("Lease is not associated with a valid store or stall.");
 
   try {
-    let paymentUrl;
     const payload = {
       lease_id: lease.id,
       storage_id: storageId,
@@ -189,28 +188,46 @@ const initiatePayment = async (leaseId, amount, payment_method = "CLICK") => {
       "X-Webhook-Secret": process.env.CENTRAL_PAYMENT_SERVICE_SECRET,
     };
 
-    if (payment_method === "PAYME") {
-      const response = await axios.post(
-        `${process.env.CENTRAL_PAYMENT_SERVICE_URL}/payment/transactions/create`,
-        payload,
-        { headers }
-      );
-      if (!response.data?.payme_link)
-        throw new Error(`Invalid response from ${payment_method}.`);
+    console.log(
+      `Calling central service with payload:`,
+      JSON.stringify(payload, null, 2)
+    );
+
+    // Use single endpoint for all payment methods
+    const response = await axios.post(
+      `${process.env.CENTRAL_PAYMENT_SERVICE_URL}/payment/transactions/create`,
+      payload,
+      { headers }
+    );
+
+    console.log(
+      `Central service response:`,
+      JSON.stringify(response.data, null, 2)
+    );
+
+    // Extract the correct link based on payment method
+    let paymentUrl;
+    const normalizedMethod = payment_method.toUpperCase();
+
+    if (normalizedMethod === "PAYME") {
+      if (!response.data?.payme_link) {
+        throw new Error(
+          "Invalid response from payment service - no payme_link"
+        );
+      }
       paymentUrl = response.data.payme_link;
-    } else if (payment_method === "CLICK") {
-      const response = await axios.post(
-        `${process.env.CENTRAL_PAYMENT_SERVICE_URL}/click/transactions/create`,
-        payload,
-        { headers }
-      );
-      if (!response.data?.click_link)
-        throw new Error("Invalid response from Click.");
+    } else if (normalizedMethod === "CLICK") {
+      if (!response.data?.click_link) {
+        throw new Error(
+          "Invalid response from payment service - no click_link"
+        );
+      }
       paymentUrl = response.data.click_link;
     } else {
       throw new Error("Unsupported payment provider.");
     }
 
+    console.log(`Payment URL received: ${paymentUrl}`);
     return { checkoutUrl: paymentUrl, transactionId: transaction.id };
   } catch (error) {
     console.error(
