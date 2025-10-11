@@ -70,7 +70,7 @@ model Store {
   area         Float
   description  String?
   type         StoreType @default(SHOP)
-  kassaID      String
+  kassaID      String    @map("paymeKassaId")
   sortKey      Int?
   leases       Lease[]
 }
