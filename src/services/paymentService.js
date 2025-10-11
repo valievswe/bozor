@@ -46,7 +46,7 @@ const calculateLeasePaymentStatus = (lease, attendanceCount = 0) => {
   if (lease.paymentInterval === "MONTHLY") {
     // Sum all PAID transactions for current month
     const totalPaidThisMonth = lease.transactions
-      .filter(tx => {
+      .filter((tx) => {
         const txDate = new Date(tx.createdAt);
         return (
           txDate.getFullYear() === currentYear &&
@@ -56,10 +56,9 @@ const calculateLeasePaymentStatus = (lease, attendanceCount = 0) => {
       .reduce((sum, tx) => sum + Number(tx.amount), 0);
 
     if (totalPaidThisMonth >= expectedAmount) return "PAID";
-
   } else if (lease.paymentInterval === "DAILY") {
     // Check if payment made today
-    const paidToday = lease.transactions.some(tx => {
+    const paidToday = lease.transactions.some((tx) => {
       const txDate = new Date(tx.createdAt);
       return (
         txDate.getFullYear() === currentYear &&
@@ -121,6 +120,8 @@ const initiatePayment = async (leaseId, amount) => {
   const lease = await prisma.lease.findUnique({
     where: { id: leaseId, isActive: true },
     include: {
+      store: { select: { id: true, storeNumber: true } },
+      stall: { select: { id: true, stallNumber: true } },
       transactions: {
         where: { status: "PAID" },
         orderBy: { createdAt: "desc" },
@@ -163,7 +164,9 @@ const initiatePayment = async (leaseId, amount) => {
       `To'lov summasi kutilganidan kam. Kerakli summa: ${expectedAmount} UZS`
     );
   }
-  console.log(`Step 3: Amount validated. Expected: ${expectedAmount}, Received: ${amount}`);
+  console.log(
+    `Step 3: Amount validated. Expected: ${expectedAmount}, Received: ${amount}`
+  );
 
   // Step 4: Check for existing PENDING transaction
   const existingPending = await prisma.transaction.findFirst({
@@ -179,16 +182,16 @@ const initiatePayment = async (leaseId, amount) => {
 
   if (existingPending) {
     console.log(
-      `Step 4: Found existing PENDING transaction ${existingPending.id}. Reusing it.`
+      `Step 4: Found existing PENDING transaction ${existingPending.id}. Deleting it to create a fresh one.`
     );
-    // Return existing transaction instead of creating new one
-    return {
-      checkoutUrl: null, // Will need to regenerate or store in DB
-      transactionId: existingPending.id,
-      message: "Mavjud kutilayotgan to'lov topildi.",
-    };
+    // Delete the old pending transaction so we can create a new one with a fresh PayMe link
+    await prisma.transaction.delete({
+      where: { id: existingPending.id },
+    });
+    console.log(`Step 4.5: Deleted old PENDING transaction ${existingPending.id}.`);
+  } else {
+    console.log(`Step 4: No existing PENDING transaction found.`);
   }
-  console.log(`Step 4: No existing PENDING transaction found.`);
 
   const transaction = await prisma.transaction.create({
     data: {
@@ -201,20 +204,29 @@ const initiatePayment = async (leaseId, amount) => {
     `Step 5: Created PENDING Transaction ID: ${transaction.id} in our database.`
   );
 
+  // Determine storage_id based on whether it's a store or stall
+  let storageId;
+  if (lease.storeId && lease.store) {
+    storageId = lease.store.kassaID; // Use kassaID for stores
+  } else if (lease.stallId && lease.stall) {
+    // For stalls, use stallNumber or stall ID - adjust based on central service expectations
+    storageId = lease.stall.stallNumber || `STALL_${lease.stallId}`;
+  }
+
+  if (!storageId) {
+    console.error(
+      `Step 6: FAILED. Lease ${leaseId} has no valid store or stall with kassaID/stallNumber.`
+    );
+    throw new Error("Lease is not associated with a valid store or stall.");
+  }
+
   const payload = {
     lease_id: lease.id,
-    storage_id: lease.storeId || lease.stallId,
+    storage_id: storageId,
     amount: amount,
     tenant_id: process.env.TENANT_ID,
     callback_url: `https://${process.env.MY_DOMAIN}/api/payments/webhook/update-status`,
   };
-
-  if (!payload.storage_id) {
-    console.error(
-      `Step 6: FAILED. Lease ${leaseId} has no storeId or stallId.`
-    );
-    throw new Error("Lease is not associated with a valid store or stall.");
-  }
   console.log(`Step 6: Built payload for central service.`);
 
   try {

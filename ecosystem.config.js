@@ -10,7 +10,7 @@ module.exports = {
         JWT_SECRET: "4657511613242003DIGITALBOZOR",
         WEBHOOK_SECRET_KEY: "MyRent_MainSecretKey_h7Kz$9pX!q@w#eR",
         MY_DOMAIN: "myrent.uz",
-        TENANT_ID: "myrent",
+        TENANT_ID: "ipak_yuli",
         CENTRAL_PAYMENT_SERVICE_URL: "https://myrent.uz/api/v1",
         CENTRAL_PAYMENT_SERVICE_SECRET: "MyRent_MainSecretKey_h7Kz$9pX!q@w#eR",
       },
@@ -36,7 +36,8 @@ module.exports = {
       env: {
         NODE_ENV: "production",
         PORT: 3004,
-	DATABASE_URL: "postgresql://muzaffar_user:MuzSavdo_Pass_789!@localhost:5432/muzaffar_savdo_db",
+        DATABASE_URL:
+          "postgresql://muzaffar_user:MuzSavdo_Pass_789!@localhost:5432/muzaffar_savdo_db",
         JWT_SECRET: "MUZAFFARSAVDOJWT09",
         WEBHOOK_SECRET_KEY: "MyRent_MainSecretKey_h7Kz$9pX!q@w#eR",
         MY_DOMAIN: "muzaffar-savdo.myrent.uz",
