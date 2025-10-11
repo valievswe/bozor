@@ -120,7 +120,7 @@ const initiatePayment = async (leaseId, amount) => {
   const lease = await prisma.lease.findUnique({
     where: { id: leaseId, isActive: true },
     include: {
-      store: { select: { id: true, storeNumber: true } },
+      store: { select: { id: true, storeNumber: true, kassaID: true } },
       stall: { select: { id: true, stallNumber: true } },
       transactions: {
         where: { status: "PAID" },
