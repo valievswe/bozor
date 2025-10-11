@@ -65,14 +65,14 @@ model Owner {
 }
 
 model Store {
-  id           Int       @id @default(autoincrement())
-  storeNumber  String    @unique
-  area         Float
-  description  String?
-  type         StoreType @default(SHOP)
-  kassaID      String    @map("paymeKassaId")
-  sortKey      Int?
-  leases       Lease[]
+  id          Int       @id @default(autoincrement())
+  storeNumber String    @unique
+  area        Float
+  description String?
+  type        StoreType @default(SHOP)
+  kassaID     String
+  sortKey     Int?
+  leases      Lease[]
 }
 
 model Stall {
@@ -91,15 +91,15 @@ enum PaymentMethod {
 }
 
 model Transaction {
-  id                 Int      @id @default(autoincrement())
+  id                 Int           @id @default(autoincrement())
   amount             Decimal
-  status             String   @default("PENDING")
+  status             String        @default("PENDING")
   paymeTransactionId String?
   leaseId            Int
-  lease              Lease    @relation(fields: [leaseId], references: [id])
+  lease              Lease         @relation(fields: [leaseId], references: [id])
   paymentMethod      PaymentMethod @default(PAYME)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
 }
 
 enum PaymentInterval {
@@ -108,22 +108,21 @@ enum PaymentInterval {
 }
 
 model Attendance {
-  id        Int      @id @default(autoincrement())
-  date      DateTime @db.Date // The date of the absence
-  
-  leaseId   Int
-  lease     Lease    @relation(fields: [leaseId], references: [id])
+  id   Int      @id @default(autoincrement())
+  date DateTime @db.Date // The date of the absence
 
+  leaseId Int
+  lease   Lease @relation(fields: [leaseId], references: [id])
 
-  @@unique([leaseId, date]) 
+  @@unique([leaseId, date])
 }
 
 model Lease {
-  id                Int           @id @default(autoincrement())
+  id                Int             @id @default(autoincrement())
   certificateNumber String?
   issueDate         DateTime?
   expiryDate        DateTime?
-  isActive          Boolean       @default(true)
+  isActive          Boolean         @default(true)
   shopMonthlyFee    Decimal?
   stallMonthlyFee   Decimal?
   guardFee          Decimal?
@@ -132,12 +131,12 @@ model Lease {
   stallId           Int?
   paymentInterval   PaymentInterval @default(MONTHLY)
   createdById       Int
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @default(now()) @updatedAt
-  createdBy         User          @relation(fields: [createdById], references: [id])
-  owner             Owner         @relation(fields: [ownerId], references: [id])
-  stall             Stall?        @relation(fields: [stallId], references: [id])
-  store             Store?        @relation(fields: [storeId], references: [id])
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @default(now()) @updatedAt
+  createdBy         User            @relation(fields: [createdById], references: [id])
+  owner             Owner           @relation(fields: [ownerId], references: [id])
+  stall             Stall?          @relation(fields: [stallId], references: [id])
+  store             Store?          @relation(fields: [storeId], references: [id])
   transactions      Transaction[]
   attendance        Attendance[]
 }
