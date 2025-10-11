@@ -100,7 +100,7 @@ const getLeaseForPayment = async (leaseId) => {
   };
 };
 
-const initiatePayment = async (leaseId, amount, payment_method = "PAYME") => {
+const initiatePayment = async (leaseId, amount, payment_method = "CLICK") => {
   console.log(`--- [PAYMENT INITIATION STARTED] ---`);
   console.log(
     `Lease ID: ${leaseId}, Amount: ${amount}, Provider: ${payment_method}`
