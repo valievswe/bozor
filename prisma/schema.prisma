@@ -87,6 +87,7 @@ enum PaymentMethod {
   PAYME
   BANK_TRANSFER
   CASH
+  CLICK
   OTHER
 }
 
