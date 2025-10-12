@@ -2,7 +2,6 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 const updatePaymentStatus = async (updateData) => {
-  // Support multiple field name variations from central service
   const contract_id = updateData.contract_id || updateData.lease_id;
   const status = updateData.status || updateData.payment_status;
   const payme_transaction_id =
@@ -41,18 +40,31 @@ const updatePaymentStatus = async (updateData) => {
     };
   }
 
+  // Build update data conditionally
+  const updateData = {
+    status: status.toUpperCase(),
+  };
+
+  // Only add optional fields if they exist
+  if (payme_transaction_id) {
+    updateData.paymeTransactionId = payme_transaction_id;
+  }
+
+  if (method) {
+    updateData.paymentMethod = method.toUpperCase();
+  }
+
   await prisma.transaction.update({
     where: { id: transaction.id },
-    data: {
-      status: status.toUpperCase(),
-      paymeTransactionId: payme_transaction_id,
-      paymentMethod: method.toUpperCase(),
-    },
+    data: updateData,
   });
 
   console.log(
-    `Webhook updated transaction ${transaction.id} for Lease ${leaseId} to status: ${status}`
+    `Webhook updated transaction ${
+      transaction.id
+    } for Lease ${leaseId} to status: ${status.toUpperCase()}`
   );
+
   return { status: "ok", message: "Status updated successfully." };
 };
 
