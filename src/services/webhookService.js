@@ -1,7 +1,10 @@
+// src/services/webhookService.js
+
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 const updatePaymentStatus = async (updateData) => {
+  // Use a fallback mechanism to handle different possible field names from the webhook
   const contract_id = updateData.contract_id || updateData.lease_id;
   const status = updateData.status || updateData.payment_status;
   const payme_transaction_id =
@@ -25,6 +28,7 @@ const updatePaymentStatus = async (updateData) => {
 
   const leaseId = parseInt(contract_id, 10);
 
+  // Find the latest PENDING transaction for this lease
   const transaction = await prisma.transaction.findFirst({
     where: { leaseId: leaseId, status: "PENDING" },
     orderBy: { createdAt: "desc" },
@@ -40,23 +44,30 @@ const updatePaymentStatus = async (updateData) => {
     };
   }
 
-  // Build update data conditionally
-  const updateData = {
+  // --- START OF THE FIX ---
+  // Create a new object with a different name to hold the data for the update.
+  const dataToUpdate = {
     status: status.toUpperCase(),
   };
+  // --- END OF THE FIX ---
 
-  // Only add optional fields if they exist
+  // Conditionally add optional fields to the new object
   if (payme_transaction_id) {
-    updateData.paymeTransactionId = payme_transaction_id;
+    dataToUpdate.paymeTransactionId = payme_transaction_id;
   }
 
   if (method) {
-    updateData.paymentMethod = method.toUpperCase();
+    // Make sure the method is a valid enum value, otherwise Prisma will throw an error
+    const validMethod = method.toUpperCase();
+    if (["PAYME", "BANK_TRANSFER", "CASH", "OTHER"].includes(validMethod)) {
+      dataToUpdate.paymentMethod = validMethod;
+    }
   }
 
+  // Use the new object in the update call
   await prisma.transaction.update({
     where: { id: transaction.id },
-    data: updateData,
+    data: dataToUpdate,
   });
 
   console.log(
