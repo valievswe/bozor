@@ -15,9 +15,9 @@ const create = async (req, res) => {
 
 const getAll = async (req, res) => {
   try {
-    const { search } = req.query;
-    const owners = await ownerService.getAllOwners(search);
-    res.status(200).json(owners);
+    const { search, page, limit } = req.query;
+    const result = await ownerService.getAllOwners(search, page, limit);
+    res.status(200).json(result);
   } catch (error) {
     console.error("Error in getAllOwners:", error);
     res.status(500).json({

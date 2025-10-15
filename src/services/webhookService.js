@@ -41,22 +41,22 @@ const updatePaymentStatus = async (updateData) => {
   }
 
   // Build update data conditionally
-  const updateData = {
+  const transactionUpdate = {
     status: status.toUpperCase(),
   };
 
   // Only add optional fields if they exist
   if (payme_transaction_id) {
-    updateData.paymeTransactionId = payme_transaction_id;
+    transactionUpdate.paymeTransactionId = payme_transaction_id;
   }
 
   if (method) {
-    updateData.paymentMethod = method.toUpperCase();
+    transactionUpdate.paymentMethod = method.toUpperCase();
   }
 
   await prisma.transaction.update({
     where: { id: transaction.id },
-    data: updateData,
+    data: transactionUpdate,
   });
 
   console.log(

@@ -39,7 +39,7 @@ const setAttendanceStatus = async (leaseId, dateString, isPresent) => {
 
   if (isPresent === false) {
     // MARK AS ABSENT: Create an absence record.
-    // We use `upsert` so if the admin clicks it twice, it doesn't crash.
+
     return prisma.attendance.upsert({
       where: {
         leaseId_date: {
