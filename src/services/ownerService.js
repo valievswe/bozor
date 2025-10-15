@@ -22,7 +22,7 @@ const createOwner = async (ownerData, createdByUserId) => {
     },
   });
 };
-const getAllOwners = async (searchTerm) => {
+const getAllOwners = async (searchTerm, page = 1, limit = 10) => {
   const whereClause = searchTerm
     ? {
         OR: [
@@ -33,10 +33,34 @@ const getAllOwners = async (searchTerm) => {
       }
     : {};
 
-  return prisma.owner.findMany({
+  // Convert to numbers and set defaults
+  const pageNum = parseInt(page, 10) || 1;
+  const limitNum = parseInt(limit, 10) || 10;
+  const skip = (pageNum - 1) * limitNum;
+
+  // Get total count for pagination metadata
+  const totalCount = await prisma.owner.count({
+    where: whereClause,
+  });
+
+  // Get paginated data
+  const owners = await prisma.owner.findMany({
     where: whereClause,
     orderBy: { createdAt: "desc" },
+    skip: skip,
+    take: limitNum,
   });
+
+  // Return data with pagination metadata
+  return {
+    data: owners,
+    pagination: {
+      total: totalCount,
+      page: pageNum,
+      limit: limitNum,
+      totalPages: Math.ceil(totalCount / limitNum),
+    },
+  };
 };
 
 const getOwnerById = async (id) => {
