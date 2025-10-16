@@ -2,8 +2,6 @@ const { PrismaClient, Prisma } = require("@prisma/client");
 const prisma = new PrismaClient();
 const axios = require("axios");
 
-// --- Utility Calculations ---
-
 const calculateExpectedPayment = (lease, attendanceCount = 0) => {
   const totalFee =
     (Number(lease.shopMonthlyFee) || 0) +
@@ -52,8 +50,6 @@ const calculateLeasePaymentStatus = (lease, attendanceCount = 0) => {
     return "PARTIALLY_PAID";
   return "UNPAID";
 };
-
-// --- Core Services ---
 
 const getLeaseForPayment = async (leaseId) => {
   const lease = await prisma.lease.findUnique({
@@ -198,8 +194,6 @@ const initiatePayment = async (leaseId, amount, payment_method = "CLICK") => {
   }
 };
 
-// --- NEW FUNCTIONS ---
-
 /**
  *  🔍 Find all active leases by owner identifier (STIR or phone number)
  */
@@ -302,8 +296,6 @@ const getCurrentMonthDebt = async (leaseId) => {
   };
 };
 
-// --- Summary Report ---
-
 const getLeasePaymentSummary = async (leaseId) => {
   const lease = await prisma.lease.findUnique({
     where: { id: leaseId, isActive: true },
@@ -381,7 +373,6 @@ const getLeasePaymentSummary = async (leaseId) => {
 
   return { summary, totalPaid, totalDebt };
 };
-
 
 module.exports = {
   getLeaseForPayment,
