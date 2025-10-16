@@ -2,6 +2,8 @@ const { PrismaClient, Prisma } = require("@prisma/client");
 const prisma = new PrismaClient();
 const axios = require("axios");
 
+// --- Utility Calculations ---
+
 const calculateExpectedPayment = (lease, attendanceCount = 0) => {
   const totalFee =
     (Number(lease.shopMonthlyFee) || 0) +
@@ -50,6 +52,8 @@ const calculateLeasePaymentStatus = (lease, attendanceCount = 0) => {
     return "PARTIALLY_PAID";
   return "UNPAID";
 };
+
+// --- Core Services ---
 
 const getLeaseForPayment = async (leaseId) => {
   const lease = await prisma.lease.findUnique({
@@ -172,11 +176,15 @@ const initiatePayment = async (leaseId, amount, payment_method = "CLICK") => {
       { headers }
     );
 
-    if (!response.data?.payme_link)
-      throw new Error("Invalid response from payment service");
+    const link =
+      response.data?.payme_link ||
+      response.data?.click_link ||
+      response.data?.checkout_url;
+
+    if (!link) throw new Error("Invalid response from payment service");
 
     return {
-      checkoutUrl: response.data[linkField],
+      checkoutUrl: link,
       transactionId: transaction.id,
       paymentType,
       remainingAmount,
@@ -189,6 +197,112 @@ const initiatePayment = async (leaseId, amount, payment_method = "CLICK") => {
     throw new Error("To‘lov xizmati vaqtincha ishlamayapti.");
   }
 };
+
+// --- NEW FUNCTIONS ---
+
+/**
+ *  🔍 Find all active leases by owner identifier (STIR or phone number)
+ */
+const findLeasesByOwner = async (identifier) => {
+  const owner = await prisma.owner.findFirst({
+    where: {
+      OR: [{ stir: identifier }, { phone: { contains: identifier } }],
+    },
+    include: {
+      leases: {
+        where: { isActive: true },
+        include: {
+          store: { select: { storeNumber: true } },
+          stall: { select: { stallNumber: true } },
+        },
+      },
+    },
+  });
+
+  if (!owner || owner.leases.length === 0)
+    throw new Error("Faol shartnomalar topilmadi.");
+
+  return owner.leases.map((lease) => ({
+    leaseId: lease.id,
+    certificateNumber: lease.certificateNumber,
+    storeNumber: lease.store?.storeNumber,
+    stallNumber: lease.stall?.stallNumber,
+    expiryDate: lease.expiryDate,
+    isActive: lease.isActive,
+  }));
+};
+
+/**
+ *  🌐 Public search for leases by term (store, stall, owner, or certificate)
+ */
+const searchPublicLeases = async (term) => {
+  const leases = await prisma.lease.findMany({
+    where: {
+      isActive: true,
+      OR: [
+        { certificateNumber: { contains: term, mode: "insensitive" } },
+        { owner: { fullName: { contains: term, mode: "insensitive" } } },
+        { store: { storeNumber: { contains: term, mode: "insensitive" } } },
+        { stall: { stallNumber: { contains: term, mode: "insensitive" } } },
+      ],
+    },
+    include: {
+      owner: { select: { fullName: true } },
+      store: { select: { storeNumber: true } },
+      stall: { select: { stallNumber: true } },
+    },
+    take: 20,
+  });
+
+  return leases.map((l) => ({
+    id: l.id,
+    certificateNumber: l.certificateNumber,
+    ownerName: l.owner.fullName,
+    storeNumber: l.store?.storeNumber,
+    stallNumber: l.stall?.stallNumber,
+    expiryDate: l.expiryDate,
+  }));
+};
+
+/**
+ *  📆 Get current month's unpaid debt info for a lease
+ */
+const getCurrentMonthDebt = async (leaseId) => {
+  const lease = await prisma.lease.findUnique({
+    where: { id: leaseId, isActive: true },
+    include: {
+      transactions: { where: { status: { in: ["PAID", "PARTIAL_PAID"] } } },
+      attendance: true,
+    },
+  });
+
+  if (!lease) throw new Error("Faol ijara shartnomasi topilmadi.");
+
+  const attendanceCount = lease.attendance?.length || 0;
+  const expectedAmount = calculateExpectedPayment(lease, attendanceCount);
+
+  const now = new Date();
+  const totalPaid = lease.transactions
+    .filter((tx) => {
+      const d = new Date(tx.createdAt);
+      return (
+        d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+      );
+    })
+    .reduce((sum, tx) => sum + Number(tx.amount), 0);
+
+  const debt = Math.max(expectedAmount - totalPaid, 0);
+
+  return {
+    leaseId,
+    expectedAmount,
+    totalPaid,
+    remainingDebt: debt,
+    status: debt === 0 ? "PAID" : totalPaid > 0 ? "PARTIALLY_PAID" : "UNPAID",
+  };
+};
+
+// --- Summary Report ---
 
 const getLeasePaymentSummary = async (leaseId) => {
   const lease = await prisma.lease.findUnique({
@@ -265,12 +379,9 @@ const getLeasePaymentSummary = async (leaseId) => {
     current.setMonth(current.getMonth() + 1);
   }
 
-  return {
-    summary,
-    totalPaid,
-    totalDebt,
-  };
+  return { summary, totalPaid, totalDebt };
 };
+
 
 module.exports = {
   getLeaseForPayment,
@@ -278,4 +389,7 @@ module.exports = {
   calculateLeasePaymentStatus,
   calculateExpectedPayment,
   getLeasePaymentSummary,
+  findLeasesByOwner,
+  searchPublicLeases,
+  getCurrentMonthDebt,
 };
