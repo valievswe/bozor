@@ -142,6 +142,26 @@ model Lease {
   attendance        Attendance[]
 }
 
+model ClickTransaction {
+  id                Int       @id @default(autoincrement())
+  clickTransId      String    @unique @map("click_trans_id")
+  clickPaydocId     String?   @map("click_paydoc_id")
+  merchantTransId   String    @map("merchant_trans_id")
+  merchantPrepareId Int?      @map("merchant_prepare_id")
+  amount            Decimal   @db.Decimal(10, 2)
+  action            Int
+  status            Int       @default(0)
+  error             Int       @default(0)
+  errorNote         String?   @map("error_note")
+  signTime          DateTime? @map("sign_time")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  @@index([merchantTransId])
+  @@index([clickTransId])
+  @@map("click_transactions")
+}
+
 model auth_group {
   id                     Int                      @id @default(autoincrement())
   name                   String                   @unique @db.VarChar(150)

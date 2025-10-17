@@ -2,7 +2,6 @@
 const paymentService = require("../services/paymentService");
 
 // --- PUBLIC FUNCTIONS ---
-
 const getLeaseForPayment = async (req, res) => {
   try {
     const leaseInfo = await paymentService.getLeaseForPayment(
@@ -10,34 +9,56 @@ const getLeaseForPayment = async (req, res) => {
     );
     res.status(200).json(leaseInfo);
   } catch (error) {
-
-res
+    res
       .status(404)
       .json({ message: "Lease not found or not active", error: error.message });
-
   }
 };
 
-
 const initiatePayment = async (req, res) => {
   try {
-    // --- THIS IS THE FIX ---
-    // 1. Destructure the 'provider' field from the request body.
-    const { leaseId, amount, provider } = req.body;
-    
-    // 2. Add 'provider' to the validation check.
-    if (!leaseId || !amount || !provider) {
-      return res.status(400).json({ message: "Lease ID, amount, and provider are required" });
+    console.log("\n" + "=".repeat(60));
+    console.log("💳 [PAYMENT REQUEST RECEIVED]");
+    console.log("Tenant:", process.env.TENANT_ID);
+    console.log("Body:", JSON.stringify(req.body, null, 2));
+    console.log("=".repeat(60));
+
+    // Extract fields - payment_method is now optional (auto-selects based on tenant)
+    const { leaseId, amount, payment_method } = req.body;
+
+    // Validate required fields
+    if (!leaseId || !amount) {
+      return res.status(400).json({
+        success: false,
+        message: "Lease ID and amount are required",
+      });
     }
-    
-    // 3. Pass all THREE arguments to the service function.
-    const result = await paymentService.initiatePayment(leaseId, amount, provider);
-    // --- END OF FIX ---
-    
-    res.status(200).json(result);
+
+    // Call service with optional payment_method
+    // If not provided, it will auto-select: ipak_yuli -> PAYME, others -> CLICK
+    const result = await paymentService.initiatePayment(
+      leaseId,
+      amount,
+      payment_method
+    );
+
+    console.log("✅ Payment initiated:", result.provider);
+    console.log("Transaction ID:", result.transactionId);
+    console.log("=".repeat(60) + "\n");
+
+    res.status(200).json({
+      success: true,
+      ...result,
+    });
   } catch (error) {
-    // Forward the specific error message from the service
-    res.status(400).json({ message: "Payment initiation failed", error: error.message });
+    console.error("❌ Payment initiation failed:", error.message);
+    console.error("=".repeat(60) + "\n");
+
+    res.status(400).json({
+      success: false,
+      message: "Payment initiation failed",
+      error: error.message,
+    });
   }
 };
 
