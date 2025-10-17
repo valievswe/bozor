@@ -31,8 +31,8 @@ console.log("=============================");
 
 const { startScheduler } = require("./utils/cron");
 
-app.use(express.json());
 app.use(cors());
+app.use(express.json());
 
 app.get("/", (req, res) => {
   res.status(200).json({
