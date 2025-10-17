@@ -586,6 +586,62 @@ const initiatePaymentWithAllocation = async (
   }
 };
 
+const findLeasesByOwner = async (identifier) => {
+  const owner = await prisma.owner.findFirst({
+    where: {
+      OR: [
+        { stir: identifier },
+        { phoneNumber: identifier },
+      ],
+    },
+  });
+
+  if (!owner) {
+    throw new Error("Tadbirkor topilmadi.");
+  }
+
+  const leases = await prisma.lease.findMany({
+    where: {
+      ownerId: owner.id,
+      isActive: true,
+    },
+    include: {
+      owner: { select: { fullName: true, stir: true, phoneNumber: true } },
+      store: { select: { storeNumber: true } },
+      stall: { select: { stallNumber: true } },
+      transactions: {
+        where: { status: { in: ["PAID", "PARTIAL_PAID"] } },
+        orderBy: { createdAt: "desc" },
+      },
+      attendance: true,
+    },
+  });
+
+  return leases.map((lease) => {
+    const attendanceCount = lease.attendance?.length || 0;
+    const paymentStatus = calculateLeasePaymentStatus(lease, attendanceCount);
+    const expectedAmount = calculateExpectedPayment(lease, attendanceCount);
+
+    return {
+      id: lease.id,
+      ownerName: lease.owner.fullName,
+      ownerStir: lease.owner.stir,
+      ownerPhone: lease.owner.phoneNumber,
+      storeNumber: lease.store?.storeNumber,
+      stallNumber: lease.stall?.stallNumber,
+      certificateNumber: lease.certificateNumber,
+      issueDate: lease.issueDate,
+      expiryDate: lease.expiryDate,
+      paymentInterval: lease.paymentInterval,
+      expectedAmount,
+      paymentStatus,
+      shopMonthlyFee: lease.shopMonthlyFee,
+      stallMonthlyFee: lease.stallMonthlyFee,
+      guardFee: lease.guardFee,
+    };
+  });
+};
+
 module.exports = {
   getLeaseForPayment,
   initiatePayment,
