@@ -183,7 +183,6 @@ const initiatePayment = async (leaseId, amount, payment_method = null) => {
       status: "PENDING",
       leaseId,
       paymentMethod: payment_method.toUpperCase(),
-      paymentType,
     },
   });
 
