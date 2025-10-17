@@ -7,7 +7,7 @@ const handleClickWebhook = async (req, res) => {
   const tenantId = process.env.TENANT_ID;
 
   console.log("\n" + "=".repeat(60));
-  console.log("📥 [WORKER] Webhook Received for tenant: ${tenantId}");
+  console.log(`📥 [WORKER] Webhook Received for tenant: ${tenantId}`);
 
   // --- PROXY LOGIC ---
   // If this instance is the main 'ipak_yuli' app, it acts as the proxy.
@@ -15,7 +15,7 @@ const handleClickWebhook = async (req, res) => {
     console.log(tenantId);
 
     console.log("\n" + "=".repeat(60));
-    console.log("📥 [PROXY] Webhook Received on myrent.uz");
+    console.log(`📥 [PROXY] Webhook Received on myrent.uz`);
     console.log("Service ID:", req.body.service_id);
 
     const serviceIdToBackend = {
