@@ -2,30 +2,16 @@ const express = require("express");
 const router = express.Router();
 const paymentController = require("../controllers/paymentController");
 
-// ==================== PUBLIC ENDPOINTS ==================== //
+router.post("/find-leases", paymentController.findLeasesByOwner);
 
-// 1️⃣ Tadbirkor o'z lease’larini STIR/telefon raqam orqali topish
-router.post("/public/find-leases", paymentController.findLeasesByOwner);
+router.get("/search", paymentController.searchPublic);
 
-// 2️⃣ Public search
-router.get("/public/search", paymentController.searchPublic);
+router.get("/lease/:id", paymentController.getLeaseForPayment);
 
-// 3️⃣ Lease ma’lumotini olish (confirmation page)
-router.get("/public/leases/:id", paymentController.getLeaseForPayment);
+router.post("/initiate", paymentController.initiatePayment);
 
-// 4️⃣ To‘lovni boshlash va checkout URL olish
-router.post("/public/initiate", paymentController.initiatePayment);
+router.get("/summary/:id", paymentController.getLeasePaymentSummary);
 
-// 5️⃣ Oyma-oy to‘lov va qarz summary
-router.get(
-  "/public/leases/:id/summary",
-  paymentController.getLeasePaymentSummary
-);
-
-// 6️⃣ Faqat joriy oy uchun qarzdorlikni olish
-router.get(
-  "/public/leases/:id/current-debt",
-  paymentController.getCurrentMonthDebt
-);
+router.get("/debt/:id", paymentController.getCurrentMonthDebt);
 
 module.exports = router;

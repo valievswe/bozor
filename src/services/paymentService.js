@@ -2,7 +2,7 @@ const { PrismaClient, Prisma } = require("@prisma/client");
 const prisma = new PrismaClient();
 const axios = require("axios");
 
-const calculateExpectedPayment = (lease, attendanceCount = 0) => {
+const calculateExpectedPayment = (lease, month, year) => {
   const totalFee =
     (Number(lease.shopMonthlyFee) || 0) +
     (Number(lease.stallMonthlyFee) || 0) +
@@ -10,44 +10,34 @@ const calculateExpectedPayment = (lease, attendanceCount = 0) => {
 
   if (lease.paymentInterval === "DAILY") {
     let workdays = 0;
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth();
     const date = new Date(year, month, 1);
-
     while (date.getMonth() === month) {
       if (date.getDay() !== 0) workdays++;
       date.setDate(date.getDate() + 1);
     }
-
-    const payableDays = workdays - attendanceCount;
-    return totalFee * payableDays;
+    const attendanceCount =
+      lease.attendance?.filter((a) => {
+        const d = new Date(a.date);
+        return d.getFullYear() === year && d.getMonth() === month;
+      }).length || 0;
+    const missedDays = Math.max(workdays - attendanceCount, 0);
+    const perDayRate = totalFee / workdays;
+    return missedDays * perDayRate;
   }
 
   return totalFee;
 };
 
-const calculateLeasePaymentStatus = (lease, attendanceCount = 0) => {
-  if (!lease || !lease.transactions) return "UNPAID";
-
+const calculateLeasePaymentStatus = async (leaseId) => {
   const now = new Date();
-  const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth();
-
-  const expectedAmount = calculateExpectedPayment(lease, attendanceCount);
-  const totalPaidThisMonth = lease.transactions
-    .filter((tx) => {
-      const txDate = new Date(tx.createdAt);
-      return (
-        txDate.getFullYear() === currentYear &&
-        txDate.getMonth() === currentMonth
-      );
-    })
-    .reduce((sum, tx) => sum + Number(tx.amount), 0);
-
-  if (totalPaidThisMonth >= expectedAmount) return "PAID";
-  if (totalPaidThisMonth > 0 && totalPaidThisMonth < expectedAmount)
-    return "PARTIALLY_PAID";
+  const month = now.getMonth();
+  const year = now.getFullYear();
+  const record = await prisma.leaseMonthPayment.findUnique({
+    where: { leaseId_month_year: { leaseId, month, year } },
+  });
+  if (!record) return "UNPAID";
+  if (record.paid >= record.expected) return "PAID";
+  if (record.paid > 0 && record.paid < record.expected) return "PARTIALLY_PAID";
   return "UNPAID";
 };
 
@@ -58,86 +48,93 @@ const getLeaseForPayment = async (leaseId) => {
       owner: { select: { fullName: true } },
       store: { select: { storeNumber: true } },
       stall: { select: { stallNumber: true } },
-      transactions: {
-        where: { status: { in: ["PAID", "PARTIAL_PAID"] } },
-        orderBy: { createdAt: "desc" },
-      },
-    },
-  });
-
-  if (!lease) throw new Error("Faol ijara shartnomasi topilmadi.");
-
-  const totalFee =
-    (Number(lease.shopMonthlyFee) || 0) +
-    (Number(lease.stallMonthlyFee) || 0) +
-    (Number(lease.guardFee) || 0);
-
-  return {
-    id: lease.id,
-    ownerName: lease.owner.fullName,
-    storeNumber: lease.store?.storeNumber,
-    stallNumber: lease.stall?.stallNumber,
-    totalFee,
-    paymentInterval: lease.paymentInterval,
-    paymentStatus: calculateLeasePaymentStatus(lease),
-    transactions: lease.transactions,
-  };
-};
-
-const initiatePayment = async (leaseId, amount, payment_method = "CLICK") => {
-  const lease = await prisma.lease.findUnique({
-    where: { id: leaseId, isActive: true },
-    include: {
-      store: { select: { id: true, storeNumber: true, kassaID: true } },
-      stall: { select: { id: true, stallNumber: true } },
-      transactions: {
-        where: { status: { in: ["PAID", "PARTIAL_PAID"] } },
-        orderBy: { createdAt: "desc" },
-      },
       attendance: true,
     },
   });
 
   if (!lease) throw new Error("Faol ijara shartnomasi topilmadi.");
 
-  const attendanceCount = lease.attendance?.length || 0;
-  const expectedAmount = calculateExpectedPayment(lease, attendanceCount);
+  const now = new Date();
+  const paymentStatus = await calculateLeasePaymentStatus(leaseId);
+  const expectedAmount = calculateExpectedPayment(
+    lease,
+    now.getMonth(),
+    now.getFullYear()
+  );
 
-  const totalPaidThisMonth = lease.transactions
-    .filter((tx) => {
-      const txDate = new Date(tx.createdAt);
-      return (
-        txDate.getFullYear() === new Date().getFullYear() &&
-        txDate.getMonth() === new Date().getMonth()
-      );
-    })
-    .reduce((sum, tx) => sum + Number(tx.amount), 0);
+  return {
+    id: lease.id,
+    ownerName: lease.owner.fullName,
+    storeNumber: lease.store?.storeNumber,
+    stallNumber: lease.stall?.stallNumber,
+    paymentStatus,
+    expectedAmount,
+  };
+};
 
-  const remainingAmount = expectedAmount - totalPaidThisMonth;
+const applyPaymentToLease = async (
+  leaseId,
+  amount,
+  paymentMethod = "CLICK"
+) => {
+  const lease = await prisma.lease.findUnique({
+    where: { id: leaseId, isActive: true },
+    include: { attendance: true, store: true, stall: true },
+  });
 
-  if (remainingAmount <= 0)
-    throw new Error("To‘lov allaqachon to‘liq amalga oshirilgan.");
+  if (!lease) throw new Error("Faol ijara shartnomasi topilmadi.");
 
-  if (Number(amount) > remainingAmount) {
-    throw new Error(
-      `To‘lov summasi ortiqcha. Qolgan to‘lov: ${remainingAmount} UZS`
-    );
+  let remaining = Number(amount);
+
+  let monthRecords = await prisma.leaseMonthPayment.findMany({
+    where: { leaseId },
+    orderBy: [{ year: "asc" }, { month: "asc" }],
+  });
+
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+
+  let currentMonthRecord = monthRecords.find(
+    (r) => r.year === currentYear && r.month === currentMonth
+  );
+
+  if (!currentMonthRecord) {
+    const expected = calculateExpectedPayment(lease, currentMonth, currentYear);
+    currentMonthRecord = await prisma.leaseMonthPayment.create({
+      data: {
+        leaseId,
+        month: currentMonth,
+        year: currentYear,
+        expected,
+        paid: 0,
+        debt: expected,
+      },
+    });
+    monthRecords.push(currentMonthRecord);
   }
 
-  const paymentType =
-    Number(amount) === remainingAmount ? "FULL_PAID" : "PARTIAL_PAID";
-
-  await prisma.transaction.deleteMany({
-    where: { leaseId, status: "PENDING" },
-  });
+  for (let record of monthRecords) {
+    if (remaining <= 0) break;
+    const debt = record.expected - record.paid;
+    if (debt <= 0) continue;
+    const payAmount = Math.min(remaining, debt);
+    await prisma.leaseMonthPayment.update({
+      where: { id: record.id },
+      data: {
+        paid: record.paid + payAmount,
+        debt: record.expected - (record.paid + payAmount),
+      },
+    });
+    remaining -= payAmount;
+  }
 
   const transaction = await prisma.transaction.create({
     data: {
       amount: new Prisma.Decimal(amount),
       status: "PENDING",
       leaseId,
-      paymentMethod: payment_method,
-      paymentType,
+      paymentMethod,
     },
   });
 
@@ -158,32 +155,27 @@ const initiatePayment = async (leaseId, amount, payment_method = "CLICK") => {
       storage_id: parseInt(storageId, 10),
       lease_id: lease.id,
       amount: parseInt(amount, 10),
-      payment_method: payment_method.toLowerCase(),
+      payment_method: paymentMethod.toLowerCase(),
     };
-
     const headers = {
       "Content-Type": "application/json",
       "X-Webhook-Secret": process.env.CENTRAL_PAYMENT_SERVICE_SECRET,
     };
-
     const response = await axios.post(
       `${process.env.CENTRAL_PAYMENT_SERVICE_URL}/payment/transactions/create`,
       payload,
       { headers }
     );
-
     const link =
       response.data?.payme_link ||
       response.data?.click_link ||
       response.data?.checkout_url;
-
     if (!link) throw new Error("Invalid response from payment service");
-
     return {
       checkoutUrl: link,
       transactionId: transaction.id,
-      paymentType,
-      remainingAmount,
+      remainingAmount: Math.max(remaining, 0),
+      paymentMethod,
     };
   } catch (error) {
     await prisma.transaction.update({
@@ -194,9 +186,47 @@ const initiatePayment = async (leaseId, amount, payment_method = "CLICK") => {
   }
 };
 
-/**
- *  🔍 Find all active leases by owner identifier (STIR or phone number)
- */
+const initiatePayment = async (leaseId, amount, paymentMethod = "CLICK") =>
+  await applyPaymentToLease(leaseId, amount, paymentMethod);
+
+const getCurrentMonthDebt = async (leaseId) => {
+  const now = new Date();
+  const month = now.getMonth();
+  const year = now.getFullYear();
+  const record = await prisma.leaseMonthPayment.findUnique({
+    where: { leaseId_month_year: { leaseId, month, year } },
+  });
+  if (!record) return { expected: 0, paid: 0, debt: 0, status: "UNPAID" };
+  const status =
+    record.paid >= record.expected
+      ? "PAID"
+      : record.paid > 0
+      ? "PARTIALLY_PAID"
+      : "UNPAID";
+  return {
+    expected: Number(record.expected),
+    paid: Number(record.paid),
+    debt: Number(record.debt),
+    status,
+  };
+};
+
+const getLeasePaymentSummary = async (leaseId) => {
+  const records = await prisma.leaseMonthPayment.findMany({
+    where: { leaseId },
+    orderBy: [{ year: "asc" }, { month: "asc" }],
+  });
+  const summary = records.map((r) => ({
+    month: `${r.year}-${String(r.month + 1).padStart(2, "0")}`,
+    expected: Number(r.expected),
+    paid: Number(r.paid),
+    debt: Number(r.debt),
+  }));
+  const totalPaid = summary.reduce((sum, m) => sum + m.paid, 0);
+  const totalDebt = summary.reduce((sum, m) => sum + m.debt, 0);
+  return { summary, totalPaid, totalDebt };
+};
+
 const findLeasesByOwner = async (identifier) => {
   const owner = await prisma.owner.findFirst({
     where: {
@@ -212,10 +242,8 @@ const findLeasesByOwner = async (identifier) => {
       },
     },
   });
-
   if (!owner || owner.leases.length === 0)
     throw new Error("Faol shartnomalar topilmadi.");
-
   return owner.leases.map((lease) => ({
     leaseId: lease.id,
     certificateNumber: lease.certificateNumber,
@@ -226,9 +254,6 @@ const findLeasesByOwner = async (identifier) => {
   }));
 };
 
-/**
- *  🌐 Public search for leases by term (store, stall, owner, or certificate)
- */
 const searchPublicLeases = async (term) => {
   const leases = await prisma.lease.findMany({
     where: {
@@ -247,7 +272,6 @@ const searchPublicLeases = async (term) => {
     },
     take: 20,
   });
-
   return leases.map((l) => ({
     id: l.id,
     certificateNumber: l.certificateNumber,
@@ -258,129 +282,14 @@ const searchPublicLeases = async (term) => {
   }));
 };
 
-/**
- *  📆 Get current month's unpaid debt info for a lease
- */
-const getCurrentMonthDebt = async (leaseId) => {
-  const lease = await prisma.lease.findUnique({
-    where: { id: leaseId, isActive: true },
-    include: {
-      transactions: { where: { status: { in: ["PAID", "PARTIAL_PAID"] } } },
-      attendance: true,
-    },
-  });
-
-  if (!lease) throw new Error("Faol ijara shartnomasi topilmadi.");
-
-  const attendanceCount = lease.attendance?.length || 0;
-  const expectedAmount = calculateExpectedPayment(lease, attendanceCount);
-
-  const now = new Date();
-  const totalPaid = lease.transactions
-    .filter((tx) => {
-      const d = new Date(tx.createdAt);
-      return (
-        d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
-      );
-    })
-    .reduce((sum, tx) => sum + Number(tx.amount), 0);
-
-  const debt = Math.max(expectedAmount - totalPaid, 0);
-
-  return {
-    leaseId,
-    expectedAmount,
-    totalPaid,
-    remainingDebt: debt,
-    status: debt === 0 ? "PAID" : totalPaid > 0 ? "PARTIALLY_PAID" : "UNPAID",
-  };
-};
-
-const getLeasePaymentSummary = async (leaseId) => {
-  const lease = await prisma.lease.findUnique({
-    where: { id: leaseId, isActive: true },
-    include: {
-      transactions: {
-        where: { status: { in: ["PAID", "PARTIAL_PAID"] } },
-        orderBy: { createdAt: "asc" },
-      },
-      attendance: true,
-    },
-  });
-
-  if (!lease) throw new Error("Faol ijara shartnomasi topilmadi.");
-
-  const isDaily = lease.paymentInterval === "DAILY";
-  const totalMonthlyFee =
-    (Number(lease.shopMonthlyFee) || 0) +
-    (Number(lease.stallMonthlyFee) || 0) +
-    (Number(lease.guardFee) || 0);
-
-  const startDate = new Date(lease.issueDate);
-  const endDate = new Date(lease.expiryDate);
-
-  const summary = [];
-  let totalPaid = 0;
-  let totalDebt = 0;
-
-  let current = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
-
-  while (current <= endDate) {
-    const month = current.getMonth();
-    const year = current.getFullYear();
-
-    let expectedAmount = totalMonthlyFee;
-
-    if (isDaily) {
-      let workdays = 0;
-      const date = new Date(year, month, 1);
-      while (date.getMonth() === month) {
-        if (date.getDay() !== 0) workdays++;
-        date.setDate(date.getDate() + 1);
-      }
-
-      const attendanceCount = lease.attendance.filter((a) => {
-        const d = new Date(a.date);
-        return d.getFullYear() === year && d.getMonth() === month;
-      }).length;
-
-      expectedAmount *= workdays - attendanceCount;
-    }
-
-    const paid = lease.transactions
-      .filter((tx) => {
-        const d = new Date(tx.createdAt);
-        return d.getFullYear() === year && d.getMonth() === month;
-      })
-      .reduce((sum, tx) => sum + Number(tx.amount), 0);
-
-    totalPaid += paid;
-    const debt = Math.max(expectedAmount - paid, 0);
-    totalDebt += debt;
-
-    summary.push({
-      month: current.toLocaleString("default", {
-        month: "long",
-        year: "numeric",
-      }),
-      expected: expectedAmount,
-      paid,
-      debt,
-    });
-
-    current.setMonth(current.getMonth() + 1);
-  }
-
-  return { summary, totalPaid, totalDebt };
-};
-
 module.exports = {
   getLeaseForPayment,
   initiatePayment,
   calculateLeasePaymentStatus,
   calculateExpectedPayment,
   getLeasePaymentSummary,
+  getCurrentMonthDebt,
   findLeasesByOwner,
   searchPublicLeases,
-  getCurrentMonthDebt,
+  applyPaymentToLease,
 };
