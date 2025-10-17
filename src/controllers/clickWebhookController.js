@@ -2,6 +2,7 @@
 
 const clickPaymentService = require("../services/clickPaymentService");
 const axios = require("axios");
+require("dotenv").config();
 
 const handleClickWebhook = async (req, res) => {
   const tenantId = process.env.TENANT_ID;
