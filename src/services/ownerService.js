@@ -54,7 +54,7 @@ const getAllOwners = async (searchTerm, page = 1, limit = 10) => {
   // Return data with pagination metadata
   return {
     data: owners,
-    pagination: {
+    meta: {
       total: totalCount,
       page: pageNum,
       limit: limitNum,
