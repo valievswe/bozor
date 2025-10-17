@@ -86,6 +86,15 @@ class ClickPaymentService {
       params.sign_time;
 
     const hash = crypto.createHash("md5").update(signString).digest("hex");
+
+    // --- TEMPORARY DEBUG LOG ---
+    console.log("--- SIGNATURE DEBUG ---");
+    console.log("STRING TO HASH:", signString);
+    console.log("SERVER HASH:   ", hash);
+    console.log("POSTMAN HASH:  ", params.sign_string);
+    console.log("-----------------------");
+    // -------------------------
+
     return hash === params.sign_string;
   }
 
