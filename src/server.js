@@ -8,6 +8,8 @@ if (process.env.NODE_ENV !== "production") {
   require("dotenv").config();
 }
 
+console.log("Current ENV:", process.env);
+
 const { startScheduler } = require("./utils/cron");
 
 app.use(express.json());
@@ -16,7 +18,7 @@ app.use(cors());
 app.get("/", (req, res) => {
   res.status(200).json({
     message: "Myrent API is running!",
-    status: "OK", 
+    status: "OK",
   });
 });
 
