@@ -71,6 +71,7 @@ const handleClickWebhook = async (req, res) => {
       if (action === 0) {
         response = await clickPaymentService.handlePrepare(req.body);
       } else if (action === 1) {
+        console.log(req.body);
         response = await clickPaymentService.handleComplete(req.body);
       } else {
         response = { error: -3, error_note: "Action not found" };
