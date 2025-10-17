@@ -25,7 +25,7 @@ module.exports = {
         JWT_SECRET: "MYRENTRIZQBARAKAJWT09",
         WEBHOOK_SECRET_KEY: "MyRent_MainSecretKey_h7Kz$9pX!q@w#eR",
         MY_DOMAIN: "rizq-baraka.myrent.uz",
-        TENANT_ID: "rizq-baraka",
+        TENANT_ID: "rizq_baraka",
         CENTRAL_PAYMENT_SERVICE_URL: "https://myrent.uz/api/v1",
         CENTRAL_PAYMENT_SERVICE_SECRET: "MyRent_MainSecretKey_h7Kz$9pX!q@w#eR",
       },
