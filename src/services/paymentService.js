@@ -2,7 +2,8 @@ const { PrismaClient, Prisma } = require("@prisma/client");
 const prisma = new PrismaClient();
 const axios = require("axios");
 
-// Helper to calculate expected payment
+// --- HELPER FUNCTIONS ---
+
 const calculateExpectedPayment = (lease, attendanceCount = 0) => {
   const totalFee =
     (Number(lease.shopMonthlyFee) || 0) +
@@ -13,61 +14,48 @@ const calculateExpectedPayment = (lease, attendanceCount = 0) => {
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth();
-
     let workdays = 0;
     const date = new Date(year, month, 1);
     while (date.getMonth() === month) {
-      const dayOfWeek = date.getDay();
-      if (dayOfWeek !== 0) workdays++;
+      if (date.getDay() !== 0) workdays++;
       date.setDate(date.getDate() + 1);
     }
-
     const payableDays = workdays - attendanceCount;
-    return totalFee * payableDays;
+    return totalFee * (payableDays > 0 ? payableDays : 0);
   }
-
-  return totalFee; // MONTHLY
+  return totalFee;
 };
 
-// Calculate lease payment status
 const calculateLeasePaymentStatus = (lease, attendanceCount = 0) => {
-  if (!lease || !lease.transactions) return "UNPAID";
-
+  if (!lease || !lease.transactions || lease.transactions.length === 0) {
+    return "UNPAID";
+  }
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth();
   const currentDate = now.getDate();
-
   const expectedAmount = calculateExpectedPayment(lease, attendanceCount);
 
   if (lease.paymentInterval === "MONTHLY") {
     const totalPaidThisMonth = lease.transactions
-      .filter((tx) => {
+      .filter(tx => {
         const txDate = new Date(tx.createdAt);
-        return (
-          txDate.getFullYear() === currentYear &&
-          txDate.getMonth() === currentMonth
-        );
+        return txDate.getFullYear() === currentYear && txDate.getMonth() === currentMonth;
       })
       .reduce((sum, tx) => sum + Number(tx.amount), 0);
-
     if (totalPaidThisMonth >= expectedAmount) return "PAID";
   } else if (lease.paymentInterval === "DAILY") {
-    const paidToday = lease.transactions.some((tx) => {
+    const paidToday = lease.transactions.some(tx => {
       const txDate = new Date(tx.createdAt);
-      return (
-        txDate.getFullYear() === currentYear &&
-        txDate.getMonth() === currentMonth &&
-        txDate.getDate() === currentDate
-      );
+      return txDate.getFullYear() === currentYear && txDate.getMonth() === currentMonth && txDate.getDate() === currentDate;
     });
     if (paidToday) return "PAID";
   }
-
   return "UNPAID";
 };
 
-// Fetch lease details
+// --- MAIN SERVICE FUNCTIONS ---
+
 const getLeaseForPayment = async (leaseId) => {
   const lease = await prisma.lease.findUnique({
     where: { id: leaseId, isActive: true },
@@ -75,36 +63,36 @@ const getLeaseForPayment = async (leaseId) => {
       owner: { select: { fullName: true } },
       store: { select: { storeNumber: true } },
       stall: { select: { stallNumber: true } },
-      transactions: {
-        where: { status: "PAID" },
-        orderBy: { createdAt: "desc" },
-        take: 1,
-      },
+      transactions: { where: { status: "PAID" }, orderBy: { createdAt: "desc" } },
     },
   });
-
   if (!lease) throw new Error("Faol ijara shartnomasi topilmadi.");
 
-  const totalFee =
-    (Number(lease.shopMonthlyFee) || 0) +
-    (Number(lease.stallMonthlyFee) || 0) +
-    (Number(lease.guardFee) || 0);
+  const attendanceCount = await prisma.attendance.count({
+    where: {
+      leaseId: lease.id,
+      date: { gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1) },
+    },
+  });
+  const totalFee = calculateExpectedPayment(lease, attendanceCount);
+  const paymentStatus = calculateLeasePaymentStatus(lease, attendanceCount);
 
   return {
-    ...lease,
+    id: lease.id,
     totalFee,
     ownerName: lease.owner.fullName,
     storeNumber: lease.store?.storeNumber,
     stallNumber: lease.stall?.stallNumber,
-    paymentStatus: calculateLeasePaymentStatus(lease),
+    paymentStatus: paymentStatus,
+    paymentInterval: lease.paymentInterval,
   };
 };
 
-const initiatePayment = async (leaseId, amount, payment_method = "CLICK") => {
+const initiatePayment = async (leaseId, amount, payment_method) => {
   console.log(`--- [PAYMENT INITIATION STARTED] ---`);
-  console.log(
-    `Lease ID: ${leaseId}, Amount: ${amount}, Provider: ${payment_method}`
-  );
+  console.log(`Lease ID: ${leaseId}, Amount: ${amount}, Provider: ${payment_method}`);
+
+  if (!payment_method) throw new Error("Payment provider is required.");
 
   const now = new Date();
   const currentYear = now.getFullYear();
@@ -113,76 +101,48 @@ const initiatePayment = async (leaseId, amount, payment_method = "CLICK") => {
   const lease = await prisma.lease.findUnique({
     where: { id: leaseId, isActive: true },
     include: {
-      store: { select: { id: true, storeNumber: true, kassaID: true } },
-      stall: { select: { id: true, stallNumber: true } },
-      transactions: {
-        where: { status: "PAID" },
-        orderBy: { createdAt: "desc" },
-      },
-      attendance: {
-        where: {
-          date: {
-            gte: new Date(currentYear, currentMonth, 1),
-            lt: new Date(currentYear, currentMonth + 1, 1),
-          },
-        },
-      },
+      store: true,
+      stall: true,
+      transactions: { where: { status: "PAID", createdAt: { gte: new Date(currentYear, currentMonth, 1) } } },
+      attendance: { where: { date: { gte: new Date(currentYear, currentMonth, 1) } } },
     },
   });
-
   if (!lease) throw new Error("Faol ijara shartnomasi topilmadi.");
 
-  const attendanceCount = lease.attendance?.length || 0;
+  const attendanceCount = lease.attendance.length;
   const paymentStatus = calculateLeasePaymentStatus(lease, attendanceCount);
-  if (paymentStatus === "PAID")
-    throw new Error("To'lov allaqachon amalga oshirilgan.");
+  if (paymentStatus === "PAID") throw new Error("Bu ijara uchun joriy davr to'lovi allaqachon to'langan.");
 
   const expectedAmount = calculateExpectedPayment(lease, attendanceCount);
-  if (Number(amount) < expectedAmount) {
-    throw new Error(`To'lov summasi kam. Kerakli summa: ${expectedAmount} UZS`);
-  }
+  if (Number(amount) < expectedAmount) throw new Error(`To'lov summasi kam. Kerakli summa: ${expectedAmount} UZS`);
 
-  // Remove old PENDING transaction
-  const existingPending = await prisma.transaction.findFirst({
-    where: {
-      leaseId,
-      status: "PENDING",
-      createdAt: { gte: new Date(currentYear, currentMonth, 1) },
-    },
-    orderBy: { createdAt: "desc" },
-  });
-
-  if (existingPending) {
-    await prisma.transaction.delete({ where: { id: existingPending.id } });
-    console.log(`Deleted old PENDING transaction ${existingPending.id}`);
-  }
+  await prisma.transaction.deleteMany({ where: { leaseId, status: "PENDING" } });
 
   const transaction = await prisma.transaction.create({
     data: {
       amount: new Prisma.Decimal(amount),
       status: "PENDING",
       leaseId,
-      paymentMethod: payment_method,
+      paymentMethod: payment_method.toUpperCase(),
     },
   });
 
-  let storageId;
-  if (lease.storeId && lease.store) {
-    const kassaId = lease.store.kassaID;
-    storageId = !isNaN(kassaId) ? parseInt(kassaId, 10) : kassaId;
-  } else if (lease.stallId && lease.stall) {
-    storageId = lease.stall.stallNumber || `STALL_${lease.stallId}`;
-  }
-  if (!storageId)
-    throw new Error("Lease is not associated with a valid store or stall.");
+  const storageIdSource = lease.store?.kassaID || lease.store?.id || lease.stall?.id;
+  if (!storageIdSource) throw new Error("Lease is not associated with a valid store or stall.");
+  
+  const storageIdAsNumber = parseInt(storageIdSource, 10);
+  if (isNaN(storageIdAsNumber)) throw new Error(`Invalid format for storage_id source: ${storageIdSource}`);
 
+  // --- THIS IS THE CORRECTED TRY/CATCH BLOCK ---
   try {
     const payload = {
-      tenant_id: process.env.TENANT_ID,
-      storage_id: parseInt(storageId, 10),
       lease_id: lease.id,
-      amount: parseInt(amount, 10),
+      storage_id: storageIdAsNumber,
+      amount: Number(amount),
+      tenant_id: process.env.TENANT_ID,
       payment_method: payment_method.toLowerCase(),
+      callback_url: `https://${process.env.MY_DOMAIN}/api/payments/webhook/update-status`,
+      return_url: `https://${process.env.MY_DOMAIN}/pay/status/${transaction.id}`,
     };
 
     const headers = {
@@ -190,10 +150,7 @@ const initiatePayment = async (leaseId, amount, payment_method = "CLICK") => {
       "X-Webhook-Secret": process.env.CENTRAL_PAYMENT_SERVICE_SECRET,
     };
 
-    console.log(
-      `Calling central service with payload:`,
-      JSON.stringify(payload, null, 2)
-    );
+    console.log("Calling central service with payload:", JSON.stringify(payload, null, 2));
 
     const response = await axios.post(
       `${process.env.CENTRAL_PAYMENT_SERVICE_URL}/payment/transactions/create`,
@@ -201,46 +158,24 @@ const initiatePayment = async (leaseId, amount, payment_method = "CLICK") => {
       { headers }
     );
 
-    console.log(
-      `Central service response:`,
-      JSON.stringify(response.data, null, 2)
-    );
+    console.log("Central service response:", JSON.stringify(response.data, null, 2));
 
-    let paymentUrl;
-    const normalizedMethod = payment_method.toLowerCase();
+    const paymentUrl = response.data?.payme_link || response.data?.click_link;
+    if (!paymentUrl) throw new Error("Invalid response from payment service - no payment link found.");
 
-    if (normalizedMethod === "payme") {
-      if (!response.data?.payme_link) {
-        throw new Error(
-          "Invalid response from payment service - no payme_link"
-        );
-      }
-      paymentUrl = response.data.payme_link;
-    } else if (normalizedMethod === "click") {
-      if (!response.data?.click_link) {
-        throw new Error(
-          "Invalid response from payment service - no click_link"
-        );
-      }
-      paymentUrl = response.data.click_link;
-    } else {
-      throw new Error("Unsupported payment provider.");
-    }
-
-    console.log(`Payment URL received: ${paymentUrl}`);
     return { checkoutUrl: paymentUrl, transactionId: transaction.id };
+
   } catch (error) {
-    console.error(
-      "Payment provider call failed:",
-      error.response?.data || error.message
-    );
+    console.error("Payment provider call failed:", error.response?.data || error.message);
     await prisma.transaction.update({
       where: { id: transaction.id },
       data: { status: "FAILED" },
     });
-    throw new Error("To'lov xizmati vaqtincha ishlamayapti.");
+    const specificError = error.response?.data?.error || "To'lov xizmati vaqtincha ishlamayapti.";
+    throw new Error(specificError);
   }
 };
+
 
 // Find leases by owner
 const findLeasesByOwner = async (identifier) => {

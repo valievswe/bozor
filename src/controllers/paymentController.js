@@ -10,30 +10,34 @@ const getLeaseForPayment = async (req, res) => {
     );
     res.status(200).json(leaseInfo);
   } catch (error) {
-    resfoiz
+
+res
       .status(404)
       .json({ message: "Lease not found or not active", error: error.message });
+
   }
 };
 
+
 const initiatePayment = async (req, res) => {
   try {
-    const { leaseId, amount, payment_method } = req.body;
-    if (!leaseId || !amount) {
-      return res
-        .status(400)
-        .json({ message: "Lease ID and amount are required" });
+    // --- THIS IS THE FIX ---
+    // 1. Destructure the 'provider' field from the request body.
+    const { leaseId, amount, provider } = req.body;
+    
+    // 2. Add 'provider' to the validation check.
+    if (!leaseId || !amount || !provider) {
+      return res.status(400).json({ message: "Lease ID, amount, and provider are required" });
     }
-    const result = await paymentService.initiatePayment(
-      leaseId,
-      amount,
-      payment_method
-    );
+    
+    // 3. Pass all THREE arguments to the service function.
+    const result = await paymentService.initiatePayment(leaseId, amount, provider);
+    // --- END OF FIX ---
+    
     res.status(200).json(result);
   } catch (error) {
-    res
-      .status(400)
-      .json({ message: "Payment initiation failed", error: error.message });
+    // Forward the specific error message from the service
+    res.status(400).json({ message: "Payment initiation failed", error: error.message });
   }
 };
 
