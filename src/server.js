@@ -8,7 +8,26 @@ if (process.env.NODE_ENV !== "production") {
   require("dotenv").config();
 }
 
-console.log("Current ENV:", process.env);
+console.log("=== ENVIRONMENT VARIABLES ===");
+console.log(
+  "App Name:",
+  process.env.TENANT_ID || process.env.MY_DOMAIN || "Unknown"
+);
+console.log("NODE_ENV:", process.env.NODE_ENV);
+console.log("PORT:", process.env.PORT);
+console.log("DATABASE_URL:", process.env.DATABASE_URL);
+console.log("JWT_SECRET:", process.env.JWT_SECRET);
+console.log("WEBHOOK_SECRET_KEY:", process.env.WEBHOOK_SECRET_KEY);
+console.log("MY_DOMAIN:", process.env.MY_DOMAIN);
+console.log(
+  "CENTRAL_PAYMENT_SERVICE_URL:",
+  process.env.CENTRAL_PAYMENT_SERVICE_URL
+);
+console.log(
+  "CENTRAL_PAYMENT_SERVICE_SECRET:",
+  process.env.CENTRAL_PAYMENT_SERVICE_SECRET
+);
+console.log("=============================");
 
 const { startScheduler } = require("./utils/cron");
 
