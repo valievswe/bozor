@@ -20,6 +20,7 @@ const calculateExpectedPayment = (lease, attendanceCount = 0) => {
     const month = now.getMonth();
     let workdays = 0;
     const date = new Date(year, month, 1);
+
     while (date.getMonth() === month) {
       if (date.getDay() !== 0) workdays++;
       date.setDate(date.getDate() + 1);
@@ -27,6 +28,7 @@ const calculateExpectedPayment = (lease, attendanceCount = 0) => {
     const payableDays = workdays - attendanceCount;
     return totalFee * (payableDays > 0 ? payableDays : 0);
   }
+
   return totalFee;
 };
 
@@ -37,7 +39,6 @@ const calculateLeasePaymentStatus = (lease, attendanceCount = 0) => {
   const now = new Date();
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth();
-  const currentDate = now.getDate();
   const expectedAmount = calculateExpectedPayment(lease, attendanceCount);
 
   if (lease.paymentInterval === "MONTHLY") {
@@ -51,13 +52,15 @@ const calculateLeasePaymentStatus = (lease, attendanceCount = 0) => {
       })
       .reduce((sum, tx) => sum + Number(tx.amount), 0);
     if (totalPaidThisMonth >= expectedAmount) return "PAID";
+    if (totalPaidThisMonth > 0 && totalPaidThisMonth < expectedAmount)
+      return "PARTIALLY_PAID";
   } else if (lease.paymentInterval === "DAILY") {
     const paidToday = lease.transactions.some((tx) => {
       const txDate = new Date(tx.createdAt);
       return (
         txDate.getFullYear() === currentYear &&
         txDate.getMonth() === currentMonth &&
-        txDate.getDate() === currentDate
+        txDate.getDate() === now.getDate()
       );
     });
     if (paidToday) return "PAID";
@@ -75,7 +78,7 @@ const getLeaseForPayment = async (leaseId) => {
       store: { select: { storeNumber: true } },
       stall: { select: { stallNumber: true } },
       transactions: {
-        where: { status: "PAID" },
+        where: { status: { in: ["PAID", "PARTIAL_PAID"] } },
         orderBy: { createdAt: "desc" },
       },
     },
@@ -95,12 +98,13 @@ const getLeaseForPayment = async (leaseId) => {
 
   return {
     id: lease.id,
-    totalFee,
     ownerName: lease.owner.fullName,
     storeNumber: lease.store?.storeNumber,
     stallNumber: lease.stall?.stallNumber,
-    paymentStatus: paymentStatus,
+    totalFee,
     paymentInterval: lease.paymentInterval,
+    paymentStatus: paymentStatus,
+    transactions: lease.transactions,
   };
 };
 
@@ -133,30 +137,41 @@ const initiatePayment = async (leaseId, amount, payment_method = null) => {
       store: { select: { id: true, storeNumber: true, kassaID: true } },
       stall: { select: { id: true, stallNumber: true } },
       transactions: {
-        where: { status: "PAID" },
+        where: { status: { in: ["PAID", "PARTIAL_PAID"] } },
         orderBy: { createdAt: "desc" },
       },
-      attendance: {
-        where: {
-          date: {
-            gte: new Date(currentYear, currentMonth, 1),
-            lt: new Date(currentYear, currentMonth + 1, 1),
-          },
-        },
-      },
+      attendance: true,
     },
   });
 
   if (!lease) throw new Error("Faol ijara shartnomasi topilmadi.");
 
-  const attendanceCount = lease.attendance.length;
-  const paymentStatus = calculateLeasePaymentStatus(lease, attendanceCount);
-  if (paymentStatus === "PAID")
-    throw new Error("Bu ijara uchun joriy davr to'lovi allaqachon to'langan.");
-
+  const attendanceCount = lease.attendance?.length || 0;
   const expectedAmount = calculateExpectedPayment(lease, attendanceCount);
-  if (Number(amount) < expectedAmount)
-    throw new Error(`To'lov summasi kam. Kerakli summa: ${expectedAmount} UZS`);
+
+  const totalPaidThisMonth = lease.transactions
+    .filter((tx) => {
+      const txDate = new Date(tx.createdAt);
+      return (
+        txDate.getFullYear() === currentYear &&
+        txDate.getMonth() === currentMonth
+      );
+    })
+    .reduce((sum, tx) => sum + Number(tx.amount), 0);
+
+  const remainingAmount = expectedAmount - totalPaidThisMonth;
+
+  if (remainingAmount <= 0)
+    throw new Error("To'lov allaqachon to'liq amalga oshirilgan.");
+
+  if (Number(amount) > remainingAmount) {
+    throw new Error(
+      `To'lov summasi ortiqcha. Qolgan to'lov: ${remainingAmount} UZS`
+    );
+  }
+
+  const paymentType =
+    Number(amount) === remainingAmount ? "FULL_PAID" : "PARTIAL_PAID";
 
   await prisma.transaction.deleteMany({
     where: { leaseId, status: "PENDING" },
@@ -168,6 +183,7 @@ const initiatePayment = async (leaseId, amount, payment_method = null) => {
       status: "PENDING",
       leaseId,
       paymentMethod: payment_method.toUpperCase(),
+      paymentType,
     },
   });
 
@@ -194,6 +210,8 @@ const initiatePayment = async (leaseId, amount, payment_method = null) => {
       checkoutUrl: paymentUrl,
       transactionId: transaction.id,
       provider: "CLICK",
+      paymentType,
+      remainingAmount,
     };
   } else if (payment_method.toUpperCase() === "PAYME") {
     // Payme via central payment service (ipak_yuli only)
@@ -259,6 +277,8 @@ const initiatePayment = async (leaseId, amount, payment_method = null) => {
         checkoutUrl: paymentUrl,
         transactionId: transaction.id,
         provider: "PAYME",
+        paymentType,
+        remainingAmount,
       };
     } catch (error) {
       console.error(
@@ -282,56 +302,86 @@ const initiatePayment = async (leaseId, amount, payment_method = null) => {
   }
 };
 
-// Find leases by owner
-const findLeasesByOwner = async (identifier) => {
-  if (!identifier)
-    throw new Error("STIR yoki telefon raqami kiritilishi shart.");
-  const owner = await prisma.owner.findFirst({
-    where: { OR: [{ tin: identifier }, { phoneNumber: identifier }] },
-  });
-  if (!owner) throw new Error("Bu ma'lumotlarga ega tadbirkor topilmadi.");
-  const leases = await prisma.lease.findMany({
-    where: { ownerId: owner.id, isActive: true },
-    select: {
-      id: true,
-      shopMonthlyFee: true,
-      store: { select: { storeNumber: true } },
-      stall: { select: { stallNumber: true } },
+const getLeasePaymentSummary = async (leaseId) => {
+  const lease = await prisma.lease.findUnique({
+    where: { id: leaseId, isActive: true },
+    include: {
+      transactions: {
+        where: { status: { in: ["PAID", "PARTIAL_PAID"] } },
+        orderBy: { createdAt: "asc" },
+      },
+      attendance: true,
     },
   });
-  if (!leases.length)
-    throw new Error(
-      "Bu tadbirkorga tegishli faol ijara shartnomalari topilmadi."
-    );
-  return leases;
-};
 
-// Public lease search
-const searchPublicLeases = async (searchTerm) => {
-  if (!searchTerm?.trim()) return [];
-  return await prisma.lease.findMany({
-    where: {
-      isActive: true,
-      OR: [
-        { owner: { fullName: { contains: searchTerm, mode: "insensitive" } } },
-        { owner: { tin: { contains: searchTerm } } },
-        { owner: { phoneNumber: { contains: searchTerm } } },
-        {
-          store: { storeNumber: { contains: searchTerm, mode: "insensitive" } },
-        },
-        {
-          stall: { stallNumber: { contains: searchTerm, mode: "insensitive" } },
-        },
-      ],
-    },
-    select: {
-      id: true,
-      owner: { select: { fullName: true, tin: true } },
-      store: { select: { storeNumber: true } },
-      stall: { select: { stallNumber: true } },
-    },
-    take: 10,
-  });
+  if (!lease) throw new Error("Faol ijara shartnomasi topilmadi.");
+
+  const isDaily = lease.paymentInterval === "DAILY";
+  const totalMonthlyFee =
+    (Number(lease.shopMonthlyFee) || 0) +
+    (Number(lease.stallMonthlyFee) || 0) +
+    (Number(lease.guardFee) || 0);
+
+  const startDate = new Date(lease.issueDate);
+  const endDate = new Date(lease.expiryDate);
+
+  const summary = [];
+  let totalPaid = 0;
+  let totalDebt = 0;
+
+  let current = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+
+  while (current <= endDate) {
+    const month = current.getMonth();
+    const year = current.getFullYear();
+
+    let expectedAmount = totalMonthlyFee;
+
+    if (isDaily) {
+      let workdays = 0;
+      const date = new Date(year, month, 1);
+      while (date.getMonth() === month) {
+        if (date.getDay() !== 0) workdays++;
+        date.setDate(date.getDate() + 1);
+      }
+
+      const attendanceCount = lease.attendance.filter((a) => {
+        const d = new Date(a.date);
+        return d.getFullYear() === year && d.getMonth() === month;
+      }).length;
+
+      expectedAmount *= workdays - attendanceCount;
+    }
+
+    const paid = lease.transactions
+      .filter((tx) => {
+        const d = new Date(tx.createdAt);
+        return d.getFullYear() === year && d.getMonth() === month;
+      })
+      .reduce((sum, tx) => sum + Number(tx.amount), 0);
+
+    totalPaid += paid;
+    const debt = Math.max(expectedAmount - paid, 0);
+    totalDebt += debt;
+
+    summary.push({
+      month: current.toLocaleString("default", {
+        month: "long",
+        year: "numeric",
+      }),
+      expected: expectedAmount,
+      paid,
+      debt,
+    });
+
+    current.setMonth(current.getMonth() + 1);
+  }
+
+  return {
+    summary,
+    totalPaid,
+    totalDebt,
+  };
 };
 
 /**
@@ -543,5 +593,5 @@ module.exports = {
   findLeasesByOwner,
   calculateLeasePaymentStatus,
   calculateExpectedPayment,
-  searchPublicLeases,
+  getLeasePaymentSummary,
 };
