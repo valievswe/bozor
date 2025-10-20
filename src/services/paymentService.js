@@ -588,10 +588,7 @@ const initiatePaymentWithAllocation = async (
 const findLeasesByOwner = async (identifier) => {
   const owner = await prisma.owner.findFirst({
     where: {
-      OR: [
-        { stir: identifier },
-        { phoneNumber: identifier },
-      ],
+      OR: [{ tin: identifier }, { phoneNumber: identifier }],
     },
   });
 
@@ -605,7 +602,7 @@ const findLeasesByOwner = async (identifier) => {
       isActive: true,
     },
     include: {
-      owner: { select: { fullName: true, stir: true, phoneNumber: true } },
+      owner: { select: { fullName: true, tin: true, phoneNumber: true } },
       store: { select: { storeNumber: true } },
       stall: { select: { stallNumber: true } },
       transactions: {
@@ -624,7 +621,7 @@ const findLeasesByOwner = async (identifier) => {
     return {
       id: lease.id,
       ownerName: lease.owner.fullName,
-      ownerStir: lease.owner.stir,
+      ownerStir: lease.owner.tin,
       ownerPhone: lease.owner.phoneNumber,
       storeNumber: lease.store?.storeNumber,
       stallNumber: lease.stall?.stallNumber,
@@ -641,11 +638,157 @@ const findLeasesByOwner = async (identifier) => {
   });
 };
 
+const searchPublicLeases = async (term) => {
+  if (!term || term.trim() === "") {
+    throw new Error("Qidiruv so'zi kiritilishi shart.");
+  }
+
+  const searchTerm = term.trim();
+
+  console.log(`[SEARCH] Searching for term: "${searchTerm}"`);
+
+  try {
+    // Search for leases based on store number, stall number, or owner name
+    const leases = await prisma.lease.findMany({
+      where: {
+        isActive: true,
+        OR: [
+          {
+            store: {
+              storeNumber: {
+                contains: searchTerm,
+                mode: "insensitive", // Case-insensitive search
+              },
+            },
+          },
+          {
+            stall: {
+              stallNumber: {
+                contains: searchTerm,
+                mode: "insensitive",
+              },
+            },
+          },
+          {
+            owner: {
+              fullName: {
+                contains: searchTerm,
+                mode: "insensitive",
+              },
+            },
+          },
+          {
+            certificateNumber: {
+              contains: searchTerm,
+              mode: "insensitive",
+            },
+          },
+        ],
+      },
+      include: {
+        owner: { select: { fullName: true, tin: true, phoneNumber: true } },
+        store: { select: { storeNumber: true } },
+        stall: { select: { stallNumber: true } },
+        transactions: {
+          where: { status: { in: ["PAID", "PARTIAL_PAID"] } },
+          orderBy: { createdAt: "desc" },
+        },
+        attendance: true,
+      },
+    });
+
+    console.log(`[SEARCH] Found ${leases.length} leases`);
+
+    if (leases.length === 0) {
+      return []; // Return empty array instead of throwing error
+    }
+
+    return leases.map((lease) => {
+      const attendanceCount = lease.attendance?.length || 0;
+      const paymentStatus = calculateLeasePaymentStatus(lease, attendanceCount);
+      const expectedAmount = calculateExpectedPayment(lease, attendanceCount);
+
+      return {
+        id: lease.id,
+        ownerName: lease.owner.fullName,
+        ownerStir: lease.owner.tin,
+        ownerPhone: lease.owner.phoneNumber,
+        storeNumber: lease.store?.storeNumber || null,
+        stallNumber: lease.stall?.stallNumber || null,
+        certificateNumber: lease.certificateNumber,
+        issueDate: lease.issueDate,
+        expiryDate: lease.expiryDate,
+        paymentInterval: lease.paymentInterval,
+        expectedAmount,
+        paymentStatus,
+        shopMonthlyFee: lease.shopMonthlyFee,
+        stallMonthlyFee: lease.stallMonthlyFee,
+        guardFee: lease.guardFee,
+      };
+    });
+  } catch (error) {
+    console.error(`[SEARCH ERROR] ${error.message}`, error);
+    throw new Error(`Qidiruvda xatolik: ${error.message}`);
+  }
+};
+
+const getCurrentMonthDebt = async (leaseId) => {
+  const lease = await prisma.lease.findUnique({
+    where: { id: leaseId, isActive: true },
+    include: {
+      transactions: {
+        where: { status: { in: ["PAID", "PARTIAL_PAID"] } },
+        orderBy: { createdAt: "desc" },
+      },
+      attendance: true,
+    },
+  });
+
+  if (!lease) throw new Error("Faol ijara shartnomasi topilmadi.");
+
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth();
+
+  const attendanceCount = lease.attendance.filter((a) => {
+    const d = new Date(a.date);
+    return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
+  }).length;
+
+  const expectedAmount = calculateExpectedPayment(lease, attendanceCount);
+
+  const totalPaidThisMonth = lease.transactions
+    .filter((tx) => {
+      const txDate = new Date(tx.createdAt);
+      return (
+        txDate.getFullYear() === currentYear &&
+        txDate.getMonth() === currentMonth
+      );
+    })
+    .reduce((sum, tx) => sum + Number(tx.amount), 0);
+
+  const debt = Math.max(expectedAmount - totalPaidThisMonth, 0);
+
+  return {
+    expectedAmount,
+    paidAmount: totalPaidThisMonth,
+    debtAmount: debt,
+    paymentStatus:
+      debt === 0
+        ? "PAID"
+        : totalPaidThisMonth > 0
+        ? "PARTIALLY_PAID"
+        : "UNPAID",
+  };
+};
+
 module.exports = {
   getLeaseForPayment,
   initiatePayment,
   initiatePaymentWithAllocation,
   findLeasesByOwner,
+  searchPublicLeases,
+  getCurrentMonthDebt,
   calculateLeasePaymentStatus,
   calculateExpectedPayment,
   getLeasePaymentSummary,
