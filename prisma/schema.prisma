@@ -80,6 +80,7 @@ model Stall {
   stallNumber String? @unique @default(uuid())
   area        Float
   payment_url String?
+  paymentQR   String?
 
   attendances Attendance[]
   Section     Section?     @relation(fields: [sectionId], references: [id], onDelete: SetNull)
@@ -140,9 +141,9 @@ model Attendance {
   stallId Int?
   status  AttendancePayment @default(UNPAID)
   Stall   Stall?            @relation(fields: [stallId], references: [id])
+  // absence Boolean @default(false)
 
   @@unique([stallId, date])
-  // absence Boolean @default(false)
 }
 
 model Lease {

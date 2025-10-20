@@ -1,70 +1,70 @@
-// src/services/attendanceService.js
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
-/**
- * @description Gets all absence records for a specific lease in a given month.
- * @param {number} leaseId The ID of the lease.
- * @param {number} year The year (e.g., 2025).
- * @param {number} month The month (1 for Jan, 12 for Dec).
- */
-const getAbsencesForMonth = async (leaseId, year, month) => {
-  const startDate = new Date(Date.UTC(year, month - 1, 1));
-  const endDate = new Date(Date.UTC(year, month, 1)); // Use the start of the next month as the boundary
+function getUtcDateOnly(date = new Date()) {
+  return new Date(
+    Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())
+  );
+}
 
-  return prisma.attendance.findMany({
+const markPresent = async (stallId) => {
+  const date = getUtcDateOnly();
+  const id = parseInt(stallId, 10);
+
+  return prisma.attendance.upsert({
     where: {
-      leaseId: parseInt(leaseId, 10),
-      date: {
-        gte: startDate,
-        lt: endDate,
+      stallId_date: {
+        stallId: id,
+        date,
       },
     },
-    orderBy: { date: "asc" },
+    update: {},
+    create: {
+      stallId: id,
+      date,
+      status: "UNPAID",
+    },
   });
 };
 
-/**
- * @description Sets the attendance status. If marking as ABSENT, it creates an absence record.
- *              If marking as PRESENT, it deletes the absence record.
- * @param {number} leaseId The ID of the lease.
- * @param {string} dateString The date in 'YYYY-MM-DD' format.
- * @param {boolean} isPresent The desired status.
- */
-const setAttendanceStatus = async (leaseId, dateString, isPresent) => {
-  const date = new Date(dateString);
-  const utcDate = new Date(
-    Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())
-  );
+const getAttendanceByStall = async (stallId, status) => {
+  const where = {
+    stallId: parseInt(stallId, 10),
+  };
+  if (status) where.status = status.toUpperCase();
 
-  if (isPresent === false) {
-    // MARK AS ABSENT: Create an absence record.
+  return prisma.attendance.findMany({
+    where,
+    orderBy: { date: "desc" },
+  });
+};
 
-    return prisma.attendance.upsert({
-      where: {
-        leaseId_date: {
-          leaseId: parseInt(leaseId, 10),
-          date: utcDate,
+const getAttendanceBySection = async (sectionId, status) => {
+  const where = {
+    Stall: {
+      sectionId: parseInt(sectionId, 10),
+    },
+  };
+  if (status) where.status = status.toUpperCase();
+
+  return prisma.attendance.findMany({
+    where,
+    include: {
+      Stall: {
+        select: {
+          id: true,
+          stallNumber: true,
+          area: true,
+          sectionId: true,
         },
       },
-      update: {}, // If it exists, do nothing.
-      create: {
-        leaseId: parseInt(leaseId, 10),
-        date: utcDate,
-      },
-    });
-  } else {
-    // MARK AS PRESENT: The tenant is no longer an exception, so we delete the absence record.
-    return prisma.attendance.deleteMany({
-      where: {
-        leaseId: parseInt(leaseId, 10),
-        date: utcDate,
-      },
-    });
-  }
+    },
+    orderBy: { date: "desc" },
+  });
 };
 
 module.exports = {
-  getAbsencesForMonth,
-  setAttendanceStatus,
+  markPresent,
+  getAttendanceByStall,
+  getAttendanceBySection,
 };
