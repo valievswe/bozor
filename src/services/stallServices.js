@@ -1,5 +1,9 @@
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
+const QRCode = require("qrcode");
+const fs = require("fs");
+const path = require("path");
+const { v4: uuidv4 } = require("uuid");
 require("dotenv").config();
 
 const createStall = async (stallData) => {
@@ -9,28 +13,21 @@ const createStall = async (stallData) => {
     const existingStall = await prisma.stall.findUnique({
       where: { stallNumber },
     });
-    if (existingStall) {
+    if (existingStall)
       throw new Error(`'${stallNumber}' raqamli rasta allaqachon mavjud.`);
-    }
   }
 
   if (sectionId) {
     const section = await prisma.section.findUnique({
       where: { id: sectionId },
     });
-    if (!section) {
-      throw new Error("Bu pavilion yoki qator topilmadi.");
-    }
+    if (!section) throw new Error("Bu pavilion yoki qator topilmadi.");
   }
 
   let saleType;
   if (saleTypeId) {
-    saleType = await prisma.saleType.findUnique({
-      where: { id: saleTypeId },
-    });
-    if (!saleType) {
-      throw new Error("Berilgan savdo turi topilmadi.");
-    }
+    saleType = await prisma.saleType.findUnique({ where: { id: saleTypeId } });
+    if (!saleType) throw new Error("Berilgan savdo turi topilmadi.");
   }
 
   const stall = await prisma.stall.create({
@@ -49,9 +46,24 @@ const createStall = async (stallData) => {
     area * (saleType?.tax || 1)
   }&transaction_param=${stall.id}`;
 
+  const qrFilename = `${uuidv4()}.png`;
+  const qrFolder = path.join(__dirname, "../public/qrcodes");
+  if (!fs.existsSync(qrFolder)) fs.mkdirSync(qrFolder, { recursive: true });
+  const qrPath = path.join(qrFolder, qrFilename);
+
+  await QRCode.toFile(qrPath, payment_url, {
+    type: "png",
+    width: 300,
+    margin: 2,
+  });
+  console.log("[INFO] QR code generated at:", qrPath);
+
   const updatedStall = await prisma.stall.update({
     where: { id: stall.id },
-    data: { payment_url },
+    data: {
+      payment_url,
+      paymentQR: qrPath,
+    },
   });
 
   return updatedStall;
