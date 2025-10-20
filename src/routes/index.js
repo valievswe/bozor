@@ -13,6 +13,7 @@ const exportRoutes = require("./exportRoutes.js");
 const webhookRoutes = require("./webhookRoutes");
 const attendanceRoutes = require("./attendanceRoutes");
 const transactionRoutes = require("./transactionRoutes");
+const sectionRoutes = require("./sectionRoutes");
 
 const router = express.Router();
 
@@ -51,5 +52,8 @@ router.use("/attendance", attendanceRoutes);
 
 // http://api/transactions/
 router.use("/transactions", transactionRoutes);
+
+// http://api/sections/
+router.use("/sections", sectionRoutes);
 
 module.exports = router;
