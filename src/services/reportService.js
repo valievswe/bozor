@@ -54,15 +54,17 @@ async function calculateCumulativeDebtForLease(lease, upToDate = new Date()) {
     );
 
     // Get attendance for this month (for daily payment interval)
-    const attendanceCount = await prisma.attendance.count({
-      where: {
-        leaseId: lease.id,
-        date: {
-          gte: monthStart,
-          lte: monthEnd,
-        },
-      },
-    });
+    const attendanceCount = lease.stallId
+      ? await prisma.attendance.count({
+          where: {
+            stallId: lease.stallId,
+            date: {
+              gte: monthStart,
+              lte: monthEnd,
+            },
+          },
+        })
+      : 0;
 
     // Calculate expected payment for this month
     let expectedAmount = 0;
@@ -154,12 +156,14 @@ const getMonthlyReport = async (year, month) => {
     );
 
     // Get attendance count for this month
-    const attendanceCount = await prisma.attendance.count({
-      where: {
-        leaseId: lease.id,
-        date: { gte: startDate, lte: endDate },
-      },
-    });
+    const attendanceCount = lease.stallId
+      ? await prisma.attendance.count({
+          where: {
+            stallId: lease.stallId,
+            date: { gte: startDate, lte: endDate },
+          },
+        })
+      : 0;
 
     // Calculate expected amount for this month
     let expectedAmount = 0;

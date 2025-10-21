@@ -84,14 +84,16 @@ const getLeaseForPayment = async (leaseId) => {
   });
   if (!lease) throw new Error("Faol ijara shartnomasi topilmadi.");
 
-  const attendanceCount = await prisma.attendance.count({
-    where: {
-      leaseId: lease.id,
-      date: {
-        gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-      },
-    },
-  });
+  const attendanceCount = lease.stallId
+    ? await prisma.attendance.count({
+        where: {
+          stallId: lease.stallId,
+          date: {
+            gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+          },
+        },
+      })
+    : 0;
   const totalFee = calculateExpectedPayment(lease, attendanceCount);
   const paymentStatus = calculateLeasePaymentStatus(lease, attendanceCount);
 
