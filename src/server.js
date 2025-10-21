@@ -1,13 +1,15 @@
 // src/app.js
-
 const express = require("express");
 const mainRouter = require("./routes/index.js");
 const cors = require("cors");
-const app = express();
+
 if (process.env.NODE_ENV !== "production") {
   require("dotenv").config();
 }
 
+const app = express();
+
+// Log environment variables
 console.log("=== ENVIRONMENT VARIABLES ===");
 console.log(
   "App Name:",
@@ -27,15 +29,20 @@ console.log(
   "CENTRAL_PAYMENT_SERVICE_SECRET:",
   process.env.CENTRAL_PAYMENT_SERVICE_SECRET
 );
+console.log("PAYMENT_SERVICE_ID:", process.env.PAYMENT_SERVICE_ID);
+console.log("PAYMENT_MERCHANT_ID:", process.env.PAYMENT_MERCHANT_ID);
+console.log("PAYMENT_SECRET_KEY:", process.env.PAYMENT_SECRET_KEY);
 console.log("=============================");
 
+// Scheduler (if you have cron jobs)
 const { startScheduler } = require("./utils/cron");
 
+// Middleware
 app.use(cors());
 app.use(express.json());
-
 app.use(express.urlencoded({ extended: true }));
 
+// Health check
 app.get("/", (req, res) => {
   res.status(200).json({
     message: "Myrent API is running!",
@@ -43,7 +50,7 @@ app.get("/", (req, res) => {
   });
 });
 
-// http://localhost:3000/api/
+// API routes
 app.use("/api", mainRouter);
 
 const PORT = process.env.PORT || 3000;
