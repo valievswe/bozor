@@ -24,7 +24,6 @@ class AttendanceService {
     const stall = await prisma.stall.findUnique({ where: { id } });
     if (!stall) throw new Error("Stall not found.");
 
-    
     return prisma.attendance.upsert({
       where: { stallId_date: { stallId: id, date } },
       update: {},
