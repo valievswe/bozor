@@ -89,6 +89,7 @@ class ClickPaymentService {
       action,
       sign_time,
     } = clickData;
+
     try {
       const tenantId = process.env.TENANT_ID;
       if (!this.isClickEnabled(tenantId))
@@ -98,6 +99,7 @@ class ClickPaymentService {
           error: -3,
           error_note: "Click not enabled",
         };
+
       const config = this.getTenantConfig(tenantId);
       if (!this.verifySignature(clickData, config.secretKey))
         return {
@@ -118,31 +120,33 @@ class ClickPaymentService {
           where: { id: attendanceId },
         });
 
-        if (!attendance) {
-          const stall = await prisma.stall.findUnique({
-            where: { id: attendanceId },
-          });
-          if (!stall)
-            return {
-              click_trans_id,
-              merchant_trans_id,
-              error: -5,
-              error_note: "Attendance or Stall not found",
-            };
+        if (!attendance || attendance.status === "PAID")
+          return {
+            click_trans_id,
+            merchant_trans_id,
+            error: -5,
+            error_note: attendance ? "Already paid" : "Attendance not found",
+          };
 
-          attendance = await prisma.attendance.findFirst({
-            where: { stallId: stall.id, date: new Date() },
+        if (!attendance.transactionId) {
+          const newTransaction = await prisma.transaction.create({
+            data: {
+              amount: attendance.amount || 0,
+              attendance: { connect: { id: attendance.id } },
+              status: "PENDING",
+            },
           });
-          if (!attendance || attendance.status === "PAID")
-            return {
-              click_trans_id,
-              merchant_trans_id,
-              error: -5,
-              error_note: attendance ? "Already paid" : "Attendance not found",
-            };
+          await prisma.attendance.update({
+            where: { id: attendance.id },
+            data: { transactionId: newTransaction.id },
+          });
+          transaction = newTransaction;
+        } else {
+          transaction = await prisma.transaction.findUnique({
+            where: { id: attendance.transactionId },
+          });
         }
 
-        transaction = attendance;
         isDaily = true;
       }
 
@@ -154,6 +158,7 @@ class ClickPaymentService {
           error_note: "Incorrect amount",
         };
 
+      // Duplicate check
       const existingClick = await prisma.clickTransaction.findUnique({
         where: { clickTransId: click_trans_id },
       });
@@ -222,6 +227,7 @@ class ClickPaymentService {
       sign_time,
       error,
     } = clickData;
+
     try {
       const tenantId = process.env.TENANT_ID;
       const config = this.getTenantConfig(tenantId);
@@ -234,11 +240,8 @@ class ClickPaymentService {
           error_note: "SIGN CHECK FAILED",
         };
 
-      const prepareTransaction = await prisma.clickTransaction.findFirst({
-        where: {
-          id: parseInt(merchant_prepare_id),
-          clickTransId: click_trans_id,
-        },
+      const prepareTransaction = await prisma.clickTransaction.findUnique({
+        where: { id: parseInt(merchant_prepare_id) },
       });
       if (!prepareTransaction)
         return {
@@ -249,28 +252,14 @@ class ClickPaymentService {
           error_note: "Transaction not found",
         };
 
-      if (prepareTransaction.status === 1) {
-        const responseSignature = this.generateSignature(
-          {
-            click_trans_id,
-            service_id,
-            merchant_trans_id,
-            merchant_prepare_id: merchant_prepare_id.toString(),
-            amount,
-            action,
-            sign_time,
-          },
-          config.secretKey
-        );
+      if (prepareTransaction.status === 1)
         return {
           click_trans_id,
           merchant_trans_id,
           merchant_prepare_id,
           error: -4,
           error_note: "Already paid",
-          sign_string: responseSignature,
         };
-      }
 
       if (error < 0) {
         await prisma.clickTransaction.update({
@@ -290,6 +279,7 @@ class ClickPaymentService {
         };
       }
 
+      // Determine if daily attendance
       let transaction = await prisma.transaction.findUnique({
         where: { id: parseInt(merchant_trans_id) },
       });
@@ -298,7 +288,7 @@ class ClickPaymentService {
       if (isDaily) {
         await prisma.attendance.update({
           where: { id: parseInt(merchant_trans_id) },
-          data: { status: "PAID", transactionId: click_trans_id },
+          data: { status: "PAID", transactionId: prepareTransaction.id },
         });
       } else {
         await prisma.transaction.update({
@@ -328,6 +318,7 @@ class ClickPaymentService {
         },
         config.secretKey
       );
+
       return {
         click_trans_id,
         merchant_trans_id,

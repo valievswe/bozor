@@ -1,70 +1,55 @@
-// src/controllers/stallController.js
 const stallService = require("../services/stallServices");
 
-const create = async (req, res) => {
+const createStall = async (req, res) => {
   try {
-    const newStall = await stallService.createStall(req.body);
-    res.status(201).json(newStall);
-  } catch (error) {
-    res
-      .status(400)
-      .json({ message: "Rasta yaratishda xatolik", error: error.message });
-  }
-};
-const getAll = async (req, res) => {
-  try {
-    const { search } = req.query;
-    const stalls = await stallService.getAllStalls(search);
-    res.status(200).json(stalls);
-  } catch (error) {
-    console.error("Error in stallController -> getAll:", error);
-    res.status(500).json({
-      message: "Rastalarni olishda xatolik",
-      error: error.message,
-    });
+    const stall = await stallService.create(req.body);
+    res.status(201).json(stall);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 };
 
-const getOne = async (req, res) => {
+const getAllStalls = async (req, res) => {
   try {
-    const stall = await stallService.getStallById(req.params.id);
-    res.status(200).json(stall);
-  } catch (error) {
-    res.status(404).json({ message: error.message });
+    const searchTerm = req.query.search || "";
+    const stalls = await stallService.getAll(searchTerm);
+    res.json(stalls);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 };
 
-const update = async (req, res) => {
+const getStallById = async (req, res) => {
   try {
-    const updatedStall = await stallService.updateStall(
-      req.params.id,
-      req.body
-    );
-    res.status(200).json(updatedStall);
-  } catch (error) {
-    const statusCode = error.message.includes("topilmadi") ? 404 : 400;
-    res
-      .status(statusCode)
-      .json({ message: "Rastani yangilashda xatolik", error: error.message });
+    const stall = await stallService.getById(req.params.id);
+    res.json(stall);
+  } catch (err) {
+    res.status(404).json({ error: err.message });
   }
 };
 
-const remove = async (req, res) => {
+const updateStall = async (req, res) => {
   try {
-    await stallService.deleteStall(req.params.id);
-    res.status(204).send();
-  } catch (error) {
-    const statusCode = error.message.includes("topilmadi") ? 404 : 400;
-    res
-      .status(statusCode)
-      .json({ message: "Rastani o'chirishda xatolik", error: error.message });
+    const updated = await stallService.update(req.params.id, req.body);
+    res.json(updated);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+};
+
+const deleteStall = async (req, res) => {
+  try {
+    await stallService.remove(req.params.id);
+    res.json({ message: "Stall deleted successfully" });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 };
 
 module.exports = {
-  create,
-  getAll,
-  getOne,
-  update,
-  remove,
+  createStall,
+  getAllStalls,
+  getStallById,
+  updateStall,
+  deleteStall,
 };

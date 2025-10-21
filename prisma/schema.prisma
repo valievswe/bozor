@@ -83,10 +83,8 @@ model Stall {
   id          Int          @id @default(autoincrement())
   stallNumber String?      @unique @default(uuid())
   area        Float
-  payment_url String?
   saleTypeId  Int?
   sectionId   Int?
-  paymentQR   String?
   description String?
   dailyFee    Decimal?     @default(0)
   Attendance  Attendance[]

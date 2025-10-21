@@ -14,8 +14,12 @@ const webhookRoutes = require("./webhookRoutes");
 const attendanceRoutes = require("./attendanceRoutes");
 const transactionRoutes = require("./transactionRoutes");
 const sectionRoutes = require("./sectionRoutes");
+const saleTypeRoutes = require("./saleTypeRoutes.js");
 
 const router = express.Router();
+
+// http://api/sale-types/
+router.use("/sale-types", saleTypeRoutes);
 
 // http://api/auth/
 router.use("/auth", authRoutes);

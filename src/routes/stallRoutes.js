@@ -1,36 +1,11 @@
-// src/routes/stallRoutes.js
 const express = require("express");
 const router = express.Router();
-const {
-  isAuthenticated,
-  hasPermission,
-} = require("../middlewares/authMiddleware");
-const stallController = require("../controllers/stallControllers");
+const stallController = require("../controllers/stall.controller");
 
-router.post(
-  "/",
-  [isAuthenticated, hasPermission("CREATE_STALL")],
-  stallController.create
-);
-router.get(
-  "/",
-  [isAuthenticated, hasPermission("VIEW_STALLS")],
-  stallController.getAll
-);
-router.get(
-  "/:id",
-  [isAuthenticated, hasPermission("VIEW_STALLS")],
-  stallController.getOne
-);
-router.put(
-  "/:id",
-  [isAuthenticated, hasPermission("EDIT_STALL")],
-  stallController.update
-);
-router.delete(
-  "/:id",
-  [isAuthenticated, hasPermission("DELETE_STALL")],
-  stallController.remove
-);
+router.post("/", stallController.createStall);
+router.get("/", stallController.getAllStalls);
+router.get("/:id", stallController.getStallById);
+router.put("/:id", stallController.updateStall);
+router.delete("/:id", stallController.deleteStall);
 
 module.exports = router;
