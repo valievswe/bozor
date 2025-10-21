@@ -30,4 +30,25 @@ router.get(
   attendanceController.getAttendanceBySection
 );
 
+// ✅ Record daily absences (run manually or via cron)
+router.post(
+  "/record-absences",
+  attendancePermission,
+  attendanceController.recordDailyAbsences
+);
+
+// ✅ Calculate debt for a specific stall
+router.get(
+  "/debt/:stallId",
+  attendancePermission,
+  attendanceController.calculateStallDebt
+);
+
+// ✅ Get attendance summary for all stalls (requires ?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD)
+router.get(
+  "/summary",
+  attendancePermission,
+  attendanceController.getAttendanceSummary
+);
+
 module.exports = router;

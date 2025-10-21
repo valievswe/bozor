@@ -836,6 +836,181 @@ const getCurrentMonthDebt = async (leaseId) => {
   };
 };
 
+// ==================== STALL ATTENDANCE PAYMENT ==================== //
+
+/**
+ * Get stall information for payment
+ */
+const getStallForPayment = async (stallId) => {
+  const stall = await prisma.stall.findUnique({
+    where: { id: stallId },
+    include: {
+      Section: true,
+      saleType: true,
+    },
+  });
+
+  if (!stall) {
+    throw new Error("Rasta topilmadi");
+  }
+
+  // Check today's attendance
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const todayAttendance = await prisma.attendance.findUnique({
+    where: {
+      stallId_date: {
+        stallId: stall.id,
+        date: today,
+      },
+    },
+  });
+
+  return {
+    stall,
+    todayAttendance,
+    alreadyPaid: todayAttendance?.status === "PAID",
+  };
+};
+
+/**
+ * Initiate stall payment for today's attendance
+ */
+const initiateStallPayment = async (stallId, payment_method) => {
+  const stall = await prisma.stall.findUnique({
+    where: { id: stallId },
+  });
+
+  if (!stall) {
+    throw new Error("Rasta topilmadi");
+  }
+
+  if (!stall.dailyFee || Number(stall.dailyFee) <= 0) {
+    throw new Error("Ushbu rasta uchun kunlik to'lov miqdori belgilanmagan");
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Check if already paid today
+  const existingAttendance = await prisma.attendance.findUnique({
+    where: {
+      stallId_date: {
+        stallId: stall.id,
+        date: today,
+      },
+    },
+  });
+
+  if (existingAttendance && existingAttendance.status === "PAID") {
+    throw new Error("Bugungi kun uchun to'lov allaqachon amalga oshirilgan");
+  }
+
+  // Auto-select payment method based on tenant
+  const tenantId = process.env.TENANT_ID || "default";
+  let finalPaymentMethod = payment_method;
+
+  if (!finalPaymentMethod) {
+    finalPaymentMethod = tenantId === "ipak_yuli" ? "PAYME" : "CLICK";
+  }
+
+  const amount = Number(stall.dailyFee);
+
+  // Create or update attendance record
+  const attendance = await prisma.attendance.upsert({
+    where: {
+      stallId_date: {
+        stallId: stall.id,
+        date: today,
+      },
+    },
+    update: {
+      amount: amount,
+      status: "UNPAID",
+    },
+    create: {
+      stallId: stall.id,
+      date: today,
+      amount: amount,
+      status: "UNPAID",
+    },
+  });
+
+  // Generate payment URL based on payment method
+  let checkoutUrl;
+
+  if (finalPaymentMethod === "PAYME") {
+    const merchantId = process.env.PAYME_MERCHANT_ID;
+    const accountId = `stall_${stallId}_attendance_${attendance.id}`;
+    const amountInTiyin = Math.round(amount * 100);
+
+    const params = new URLSearchParams({
+      m: merchantId,
+      ac: accountId,
+      a: amountInTiyin.toString(),
+      c: `Rasta ${stall.stallNumber} - ${today.toLocaleDateString()}`,
+    });
+
+    checkoutUrl = `https://checkout.paycom.uz/${params.toString()}`;
+  } else if (finalPaymentMethod === "CLICK") {
+    const serviceId = process.env.CLICK_SERVICE_ID;
+    const merchantId = process.env.CLICK_MERCHANT_ID;
+    const merchantUserId = attendance.id; // This will be passed as merchant_user_id
+    const merchantTransId = attendance.id; // This will be passed as transaction_param (what becomes merchant_trans_id)
+    const amountFormatted = amount.toFixed(2);
+
+    const params = new URLSearchParams({
+      service_id: serviceId,
+      merchant_id: merchantId,
+      merchant_user_id: merchantUserId.toString(),
+      amount: amountFormatted,
+      transaction_param: merchantTransId.toString(),
+      return_url: `${process.env.FRONTEND_URL || "http://localhost:5173"}/payment/success`,
+      card_type: "uzcard",
+    });
+
+    checkoutUrl = `https://my.click.uz/services/pay?${params.toString()}`;
+  }
+
+  return {
+    success: true,
+    checkoutUrl,
+    attendance: {
+      id: attendance.id,
+      date: attendance.date,
+      amount: attendance.amount,
+      status: attendance.status,
+    },
+    stall: {
+      id: stall.id,
+      stallNumber: stall.stallNumber,
+    },
+  };
+};
+
+/**
+ * Get today's attendance for a stall
+ */
+const getTodayAttendance = async (stallId) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const attendance = await prisma.attendance.findUnique({
+    where: {
+      stallId_date: {
+        stallId: stallId,
+        date: today,
+      },
+    },
+  });
+
+  return {
+    attendance: attendance || null,
+    hasPaid: attendance?.status === "PAID",
+  };
+};
+
 module.exports = {
   getLeaseForPayment,
   initiatePayment,
@@ -846,4 +1021,7 @@ module.exports = {
   calculateLeasePaymentStatus,
   calculateExpectedPayment,
   getLeasePaymentSummary,
+  getStallForPayment,
+  initiateStallPayment,
+  getTodayAttendance,
 };

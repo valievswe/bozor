@@ -132,6 +132,66 @@ const getCurrentMonthDebt = async (req, res) => {
   }
 };
 
+// ==================== STALL ATTENDANCE PAYMENT ==================== //
+
+// 7️⃣ Get stall information for attendance payment
+const getStallForPayment = async (req, res) => {
+  try {
+    const stallId = parseInt(req.params.id, 10);
+    if (isNaN(stallId)) {
+      return res.status(400).json({ message: "Invalid stall ID" });
+    }
+
+    const stallInfo = await paymentService.getStallForPayment(stallId);
+    res.status(200).json(stallInfo);
+  } catch (error) {
+    res
+      .status(404)
+      .json({ message: "Stall not found", error: error.message });
+  }
+};
+
+// 8️⃣ Initiate attendance payment for a stall
+const initiateStallPayment = async (req, res) => {
+  try {
+    const stallId = parseInt(req.params.id, 10);
+    if (isNaN(stallId)) {
+      return res.status(400).json({ message: "Invalid stall ID" });
+    }
+
+    const { payment_method } = req.body;
+
+    const result = await paymentService.initiateStallPayment(
+      stallId,
+      payment_method
+    );
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      message: error.message || "Failed to initiate stall payment",
+    });
+  }
+};
+
+// 9️⃣ Check today's attendance status for a stall
+const getTodayAttendance = async (req, res) => {
+  try {
+    const stallId = parseInt(req.params.id, 10);
+    if (isNaN(stallId)) {
+      return res.status(400).json({ message: "Invalid stall ID" });
+    }
+
+    const attendance = await paymentService.getTodayAttendance(stallId);
+    res.status(200).json(attendance);
+  } catch (error) {
+    res.status(404).json({
+      message: "Unable to fetch attendance",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   getLeaseForPayment,
   initiatePayment,
@@ -139,4 +199,7 @@ module.exports = {
   searchPublic,
   getLeasePaymentSummary,
   getCurrentMonthDebt,
+  getStallForPayment,
+  initiateStallPayment,
+  getTodayAttendance,
 };

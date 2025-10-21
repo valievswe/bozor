@@ -133,25 +133,22 @@ class ClickPaymentService {
       let isDaily = false;
 
       if (!transaction) {
-        // Daily payment → lookup attendance
+        // Daily payment → lookup attendance by attendance ID
         console.log(
-          "[INFO] Treating merchant_trans_id as stallId for daily payment"
+          "[INFO] Treating merchant_trans_id as attendance ID for daily payment"
         );
-        const stallId = parseInt(merchant_trans_id, 10);
-        const today = new Date();
-        const utcDate = new Date(
-          Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())
-        );
+        const attendanceId = parseInt(merchant_trans_id, 10);
 
-        const attendance = await prisma.attendance.findFirst({
-          where: { stallId, status: "UNPAID", date: utcDate },
+        const attendance = await prisma.attendance.findUnique({
+          where: { id: attendanceId },
         });
-        if (!attendance)
+
+        if (!attendance || attendance.status === "PAID")
           return {
             click_trans_id,
             merchant_trans_id,
             error: -5,
-            error_note: "Attendance not found",
+            error_note: attendance ? "Already paid" : "Attendance not found",
           };
 
         transaction = attendance;
@@ -321,14 +318,13 @@ class ClickPaymentService {
         console.log(
           "[INFO] Completing daily payment → marking attendance PAID"
         );
-        const stallId = parseInt(merchant_trans_id, 10);
-        const today = new Date();
-        const utcDate = new Date(
-          Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())
-        );
-        await prisma.attendance.updateMany({
-          where: { stallId, status: "UNPAID", date: utcDate },
-          data: { status: "PAID" },
+        const attendanceId = parseInt(merchant_trans_id, 10);
+        await prisma.attendance.update({
+          where: { id: attendanceId },
+          data: {
+            status: "PAID",
+            transactionId: click_trans_id,
+          },
         });
       } else {
         console.log(

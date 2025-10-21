@@ -76,9 +76,11 @@ model Store {
 }
 
 model Stall {
-  id          Int     @id @default(autoincrement())
-  stallNumber String? @unique @default(uuid())
+  id          Int      @id @default(autoincrement())
+  stallNumber String?  @unique @default(uuid())
   area        Float
+  description String?
+  dailyFee    Decimal? @default(0)
   payment_url String?
   paymentQR   String?
 
@@ -91,9 +93,10 @@ model Stall {
 }
 
 model Section {
-  id     Int     @id @default(autoincrement())
-  name   String
-  stalls Stall[]
+  id          Int     @id @default(autoincrement())
+  name        String
+  description String?
+  stalls      Stall[]
 }
 
 model SaleType {
@@ -135,13 +138,17 @@ enum AttendancePayment {
 }
 
 model Attendance {
-  id   Int      @id @default(autoincrement())
-  date DateTime @db.Date
+  id     Int      @id @default(autoincrement())
+  date   DateTime @db.Date
+  amount Decimal? @default(0)
 
-  stallId Int?
-  status  AttendancePayment @default(UNPAID)
-  Stall   Stall?            @relation(fields: [stallId], references: [id])
-  // absence Boolean @default(false)
+  stallId       Int?
+  status        AttendancePayment @default(UNPAID)
+  Stall         Stall?            @relation(fields: [stallId], references: [id])
+  transactionId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([stallId, date])
 }

@@ -28,4 +28,15 @@ router.get(
   paymentController.getCurrentMonthDebt
 );
 
+// ==================== STALL ATTENDANCE PAYMENT ==================== //
+
+// 7️⃣ Get stall information for attendance payment
+router.get("/public/stalls/:id", paymentController.getStallForPayment);
+
+// 8️⃣ Initiate attendance payment for a stall
+router.post("/public/stalls/:id/pay", paymentController.initiateStallPayment);
+
+// 9️⃣ Check today's attendance status for a stall
+router.get("/public/stalls/:id/attendance-today", paymentController.getTodayAttendance);
+
 module.exports = router;

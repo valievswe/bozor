@@ -7,7 +7,7 @@ const { v4: uuidv4 } = require("uuid");
 require("dotenv").config();
 
 const createStall = async (stallData) => {
-  const { stallNumber, area, description, sectionId, saleTypeId } = stallData;
+  const { stallNumber, area, dailyFee, description, sectionId, saleTypeId } = stallData;
 
   if (stallNumber) {
     const existingStall = await prisma.stall.findUnique({
@@ -34,6 +34,7 @@ const createStall = async (stallData) => {
     data: {
       stallNumber,
       area,
+      dailyFee,
       description,
       sectionId,
       saleTypeId,
@@ -93,11 +94,34 @@ const getAllStalls = async (searchTerm) => {
     },
   });
 
-  return stalls.map((stall) => ({
-    ...stall,
-    attendanceCount: stall._count.attendances,
-    _count: undefined,
-  }));
+  // For each stall, find the active lease if any
+  const stallsWithLeases = await Promise.all(
+    stalls.map(async (stall) => {
+      const activeLease = await prisma.lease.findFirst({
+        where: {
+          stallId: stall.id,
+          isActive: true,
+        },
+        include: {
+          owner: {
+            select: {
+              id: true,
+              fullName: true,
+            },
+          },
+        },
+      });
+
+      return {
+        ...stall,
+        attendanceCount: stall._count.attendances,
+        activeLease: activeLease || null,
+        _count: undefined,
+      };
+    })
+  );
+
+  return stallsWithLeases;
 };
 
 const getStallById = async (id) => {
