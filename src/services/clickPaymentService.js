@@ -47,7 +47,6 @@ class ClickPaymentService {
   }
 
   getTenantConfig(tenantId) {
-    console.log(`[INFO] getTenantConfig(${tenantId})`);
     if (!this.isClickEnabled(tenantId))
       throw new Error(`Click.uz not enabled for tenant: ${tenantId}`);
     const config = this.tenantConfig[tenantId];
@@ -67,34 +66,20 @@ class ClickPaymentService {
       params.action +
       params.sign_time;
 
-    const hash = crypto.createHash("md5").update(signString).digest("hex");
-    console.log("[SIGNATURE] Generated hash:", hash);
-    return hash;
+    return crypto.createHash("md5").update(signString).digest("hex");
   }
 
   verifySignature(params, secretKey) {
     const hash = this.generateSignature(params, secretKey);
-    const match = hash === params.sign_string;
-    console.log(`[SIGNATURE] Verification → ${match}`);
-    if (!match)
-      console.log(
-        "[SIGNATURE] Expected:",
-        hash,
-        "Received:",
-        params.sign_string
-      );
-    return match;
+    return hash === params.sign_string;
   }
 
   generatePaymentUrl(transactionId, amount, tenantId) {
     const config = this.getTenantConfig(tenantId);
-    const url = `https://my.click.uz/services/pay?service_id=${config.serviceId}&merchant_id=${config.merchantId}&amount=${amount}&transaction_param=${transactionId}`;
-    console.log("[INFO] Payment URL generated:", url);
-    return url;
+    return `https://my.click.uz/services/pay?service_id=${config.serviceId}&merchant_id=${config.merchantId}&amount=${amount}&transaction_param=${transactionId}`;
   }
 
   async handlePrepare(clickData) {
-    console.log("\n🔍 [CLICK PREPARE] Request received", clickData);
     const {
       click_trans_id,
       service_id,
@@ -104,10 +89,8 @@ class ClickPaymentService {
       action,
       sign_time,
     } = clickData;
-
     try {
       const tenantId = process.env.TENANT_ID;
-      console.log(`[INFO] Tenant: ${tenantId}`);
       if (!this.isClickEnabled(tenantId))
         return {
           click_trans_id,
@@ -115,7 +98,6 @@ class ClickPaymentService {
           error: -3,
           error_note: "Click not enabled",
         };
-
       const config = this.getTenantConfig(tenantId);
       if (!this.verifySignature(clickData, config.secretKey))
         return {
@@ -125,41 +107,45 @@ class ClickPaymentService {
           error_note: "SIGN CHECK FAILED",
         };
 
-      // Try monthly transaction first
       let transaction = await prisma.transaction.findFirst({
         where: { id: parseInt(merchant_trans_id), status: "PENDING" },
-        include: { lease: true },
       });
       let isDaily = false;
 
       if (!transaction) {
-        // Daily payment → lookup attendance by attendance ID
-        console.log(
-          "[INFO] Treating merchant_trans_id as attendance ID for daily payment"
-        );
-        const attendanceId = parseInt(merchant_trans_id, 10);
-
-        const attendance = await prisma.attendance.findUnique({
+        const attendanceId = parseInt(merchant_trans_id);
+        let attendance = await prisma.attendance.findUnique({
           where: { id: attendanceId },
         });
 
-        if (!attendance || attendance.status === "PAID")
-          return {
-            click_trans_id,
-            merchant_trans_id,
-            error: -5,
-            error_note: attendance ? "Already paid" : "Attendance not found",
-          };
+        if (!attendance) {
+          const stall = await prisma.stall.findUnique({
+            where: { id: attendanceId },
+          });
+          if (!stall)
+            return {
+              click_trans_id,
+              merchant_trans_id,
+              error: -5,
+              error_note: "Attendance or Stall not found",
+            };
+
+          attendance = await prisma.attendance.findFirst({
+            where: { stallId: stall.id, date: new Date() },
+          });
+          if (!attendance || attendance.status === "PAID")
+            return {
+              click_trans_id,
+              merchant_trans_id,
+              error: -5,
+              error_note: attendance ? "Already paid" : "Attendance not found",
+            };
+        }
 
         transaction = attendance;
         isDaily = true;
       }
 
-      console.log(
-        `[INFO] Amount verification: expected=${
-          transaction.amount || 0
-        }, received=${amount}`
-      );
       if (parseFloat(amount) !== parseFloat(transaction.amount || 0))
         return {
           click_trans_id,
@@ -168,7 +154,6 @@ class ClickPaymentService {
           error_note: "Incorrect amount",
         };
 
-      // Check duplicate click
       const existingClick = await prisma.clickTransaction.findUnique({
         where: { clickTransId: click_trans_id },
       });
@@ -207,7 +192,6 @@ class ClickPaymentService {
         config.secretKey
       );
 
-      console.log("[INFO] PREPARE successful");
       return {
         click_trans_id,
         merchant_trans_id,
@@ -228,7 +212,6 @@ class ClickPaymentService {
   }
 
   async handleComplete(clickData) {
-    console.log("\n✅ [CLICK COMPLETE] Request received", clickData);
     const {
       click_trans_id,
       service_id,
@@ -239,7 +222,6 @@ class ClickPaymentService {
       sign_time,
       error,
     } = clickData;
-
     try {
       const tenantId = process.env.TENANT_ID;
       const config = this.getTenantConfig(tenantId);
@@ -280,7 +262,6 @@ class ClickPaymentService {
           },
           config.secretKey
         );
-        console.log("[INFO] Already completed");
         return {
           click_trans_id,
           merchant_trans_id,
@@ -300,7 +281,6 @@ class ClickPaymentService {
             errorNote: "Payment cancelled",
           },
         });
-        console.log("[INFO] Payment cancelled by user");
         return {
           click_trans_id,
           merchant_trans_id,
@@ -310,26 +290,17 @@ class ClickPaymentService {
         };
       }
 
-      // Determine daily or monthly
-      const isDaily = !(await prisma.transaction.findUnique({
+      let transaction = await prisma.transaction.findUnique({
         where: { id: parseInt(merchant_trans_id) },
-      }));
+      });
+      const isDaily = !transaction;
+
       if (isDaily) {
-        console.log(
-          "[INFO] Completing daily payment → marking attendance PAID"
-        );
-        const attendanceId = parseInt(merchant_trans_id, 10);
         await prisma.attendance.update({
-          where: { id: attendanceId },
-          data: {
-            status: "PAID",
-            transactionId: click_trans_id,
-          },
+          where: { id: parseInt(merchant_trans_id) },
+          data: { status: "PAID", transactionId: click_trans_id },
         });
       } else {
-        console.log(
-          "[INFO] Completing monthly payment → marking transaction PAID"
-        );
         await prisma.transaction.update({
           where: { id: parseInt(merchant_trans_id) },
           data: {
@@ -342,13 +313,9 @@ class ClickPaymentService {
 
       await prisma.clickTransaction.update({
         where: { id: parseInt(merchant_prepare_id) },
-        data: {
-          status: 1,
-          action: parseInt(action),
-          error: 0,
-          errorNote: "Success",
-        },
+        data: { status: 1 },
       });
+
       const responseSignature = this.generateSignature(
         {
           click_trans_id,
@@ -361,8 +328,6 @@ class ClickPaymentService {
         },
         config.secretKey
       );
-      console.log("[INFO] COMPLETE successful");
-
       return {
         click_trans_id,
         merchant_trans_id,
@@ -382,6 +347,10 @@ class ClickPaymentService {
       };
     }
   }
+
+  async close() {
+    await prisma.$disconnect();
+  }
 }
 
-module.exports = new ClickPaymentService();
+module.exports = ClickPaymentService;
