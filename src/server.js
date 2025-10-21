@@ -2,6 +2,7 @@
 const express = require("express");
 const mainRouter = require("./routes/index.js");
 const cors = require("cors");
+const setupSwagger = require("./swagger"); // ✅ Add this line
 
 if (process.env.NODE_ENV !== "production") {
   require("dotenv").config();
@@ -34,7 +35,6 @@ console.log("PAYMENT_MERCHANT_ID:", process.env.PAYMENT_MERCHANT_ID);
 console.log("PAYMENT_SECRET_KEY:", process.env.PAYMENT_SECRET_KEY);
 console.log("=============================");
 
-// Scheduler (if you have cron jobs)
 const { startScheduler } = require("./utils/cron");
 
 // Middleware
@@ -53,8 +53,10 @@ app.get("/", (req, res) => {
 // API routes
 app.use("/api", mainRouter);
 
+setupSwagger(app);
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+  console.log(`🚀 Server is running on port ${PORT}`);
   startScheduler();
 });
