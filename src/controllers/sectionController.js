@@ -1,4 +1,4 @@
-import SectionService from "../services/sectionService";
+const SectionService = require("../services/sectionService.js");
 
 class SectionController {
   async create(req, res) {
@@ -65,4 +65,4 @@ class SectionController {
   }
 }
 
-export default new SectionController();
+module.exports = new SectionController();

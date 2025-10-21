@@ -36,4 +36,4 @@ class SectionService {
   }
 }
 
-export default new SectionService();
+module.exports = new SectionService();
