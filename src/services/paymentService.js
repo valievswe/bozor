@@ -140,13 +140,23 @@ const initiatePayment = async (leaseId, amount, payment_method = null) => {
         where: { status: { in: ["PAID", "PARTIAL_PAID"] } },
         orderBy: { createdAt: "desc" },
       },
-      attendance: true,
     },
   });
 
   if (!lease) throw new Error("Faol ijara shartnomasi topilmadi.");
 
-  const attendanceCount = lease.attendance?.length || 0;
+  // Get attendance count for current month if lease has a stall
+  const attendanceCount = lease.stallId
+    ? await prisma.attendance.count({
+        where: {
+          stallId: lease.stallId,
+          date: {
+            gte: new Date(currentYear, currentMonth, 1),
+            lt: new Date(currentYear, currentMonth + 1, 1),
+          },
+        },
+      })
+    : 0;
   const expectedAmount = calculateExpectedPayment(lease, attendanceCount);
 
   const totalPaidThisMonth = lease.transactions
@@ -309,11 +319,18 @@ const getLeasePaymentSummary = async (leaseId) => {
         where: { status: { in: ["PAID", "PARTIAL_PAID"] } },
         orderBy: { createdAt: "asc" },
       },
-      attendance: true,
     },
   });
 
   if (!lease) throw new Error("Faol ijara shartnomasi topilmadi.");
+
+  // Fetch all attendance records for this lease's stall if it has one
+  const attendanceRecords = lease.stallId
+    ? await prisma.attendance.findMany({
+        where: { stallId: lease.stallId },
+        select: { date: true },
+      })
+    : [];
 
   const isDaily = lease.paymentInterval === "DAILY";
   const totalMonthlyFee =
@@ -344,7 +361,7 @@ const getLeasePaymentSummary = async (leaseId) => {
         date.setDate(date.getDate() + 1);
       }
 
-      const attendanceCount = lease.attendance.filter((a) => {
+      const attendanceCount = attendanceRecords.filter((a) => {
         const d = new Date(a.date);
         return d.getFullYear() === year && d.getMonth() === month;
       }).length;
@@ -419,7 +436,6 @@ const initiatePaymentWithAllocation = async (
         where: { status: "PAID" },
         orderBy: { createdAt: "desc" },
       },
-      attendance: true,
     },
   });
 
@@ -607,12 +623,33 @@ const findLeasesByOwner = async (identifier) => {
         where: { status: { in: ["PAID", "PARTIAL_PAID"] } },
         orderBy: { createdAt: "desc" },
       },
-      attendance: true,
     },
   });
 
-  return leases.map((lease) => {
-    const attendanceCount = lease.attendance?.length || 0;
+  // Get current month for attendance counting
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth();
+
+  // Fetch attendance counts for all stalls in parallel
+  const attendanceCounts = await Promise.all(
+    leases.map((lease) =>
+      lease.stallId
+        ? prisma.attendance.count({
+            where: {
+              stallId: lease.stallId,
+              date: {
+                gte: new Date(currentYear, currentMonth, 1),
+                lt: new Date(currentYear, currentMonth + 1, 1),
+              },
+            },
+          })
+        : Promise.resolve(0)
+    )
+  );
+
+  return leases.map((lease, index) => {
+    const attendanceCount = attendanceCounts[index];
     const paymentStatus = calculateLeasePaymentStatus(lease, attendanceCount);
     const expectedAmount = calculateExpectedPayment(lease, attendanceCount);
 
@@ -682,7 +719,6 @@ const searchPublicLeases = async (term) => {
           where: { status: { in: ["PAID", "PARTIAL_PAID"] } },
           orderBy: { createdAt: "desc" },
         },
-        attendance: true,
       },
     });
 
@@ -692,8 +728,30 @@ const searchPublicLeases = async (term) => {
       return []; // Return empty array instead of throwing error
     }
 
-    return leases.map((lease) => {
-      const attendanceCount = lease.attendance?.length || 0;
+    // Get current month for attendance counting
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+
+    // Fetch attendance counts for all stalls in parallel
+    const attendanceCounts = await Promise.all(
+      leases.map((lease) =>
+        lease.stallId
+          ? prisma.attendance.count({
+              where: {
+                stallId: lease.stallId,
+                date: {
+                  gte: new Date(currentYear, currentMonth, 1),
+                  lt: new Date(currentYear, currentMonth + 1, 1),
+                },
+              },
+            })
+          : Promise.resolve(0)
+      )
+    );
+
+    return leases.map((lease, index) => {
+      const attendanceCount = attendanceCounts[index];
       const paymentStatus = calculateLeasePaymentStatus(lease, attendanceCount);
       const expectedAmount = calculateExpectedPayment(lease, attendanceCount);
 
@@ -729,7 +787,6 @@ const getCurrentMonthDebt = async (leaseId) => {
         where: { status: { in: ["PAID", "PARTIAL_PAID"] } },
         orderBy: { createdAt: "desc" },
       },
-      attendance: true,
     },
   });
 
@@ -739,10 +796,18 @@ const getCurrentMonthDebt = async (leaseId) => {
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth();
 
-  const attendanceCount = lease.attendance.filter((a) => {
-    const d = new Date(a.date);
-    return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
-  }).length;
+  // Get attendance count for current month if lease has a stall
+  const attendanceCount = lease.stallId
+    ? await prisma.attendance.count({
+        where: {
+          stallId: lease.stallId,
+          date: {
+            gte: new Date(currentYear, currentMonth, 1),
+            lt: new Date(currentYear, currentMonth + 1, 1),
+          },
+        },
+      })
+    : 0;
 
   const expectedAmount = calculateExpectedPayment(lease, attendanceCount);
 
