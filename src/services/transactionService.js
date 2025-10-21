@@ -115,11 +115,6 @@ const getAllTransactions = async (queryParams) => {
           store: { storeNumber: { contains: search, mode: "insensitive" } },
         },
       },
-      {
-        lease: {
-          stall: { stallNumber: { contains: search, mode: "insensitive" } },
-        },
-      },
     ];
   }
 
@@ -135,7 +130,6 @@ const getAllTransactions = async (queryParams) => {
             id: true,
             owner: { select: { fullName: true } },
             store: { select: { storeNumber: true } },
-            stall: { select: { stallNumber: true } },
           },
         },
       },
@@ -164,7 +158,6 @@ const getTransactionById = async (id) => {
           id: true,
           owner: { select: { fullName: true } },
           store: { select: { storeNumber: true } },
-          stall: { select: { stallNumber: true } },
         },
       },
     },

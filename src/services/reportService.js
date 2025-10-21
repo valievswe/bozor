@@ -308,7 +308,7 @@ const getDashboardStats = async () => {
       orderBy: { createdAt: "desc" },
       take: 5,
       include: {
-        lease: { include: { owner: true, store: true, stall: true } },
+        lease: { include: { owner: true, store: true } },
       },
     });
 

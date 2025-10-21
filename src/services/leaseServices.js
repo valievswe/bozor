@@ -232,7 +232,6 @@ const getLeaseById = async (id) => {
     include: {
       owner: true,
       store: true,
-      stall: true,
       createdBy: { select: { firstName: true, lastName: true, email: true } },
     },
   });

@@ -10,7 +10,6 @@ const exportLeasesToExcel = async () => {
     include: {
       owner: true,
       store: true,
-      stall: true,
       transactions: {
         where: { status: "PAID" },
         orderBy: { createdAt: "desc" },

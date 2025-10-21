@@ -76,7 +76,6 @@ const getLeaseForPayment = async (leaseId) => {
     include: {
       owner: { select: { fullName: true } },
       store: { select: { storeNumber: true } },
-      stall: { select: { stallNumber: true } },
       transactions: {
         where: { status: { in: ["PAID", "PARTIAL_PAID"] } },
         orderBy: { createdAt: "desc" },
@@ -135,7 +134,6 @@ const initiatePayment = async (leaseId, amount, payment_method = null) => {
     where: { id: leaseId, isActive: true },
     include: {
       store: { select: { id: true, storeNumber: true, kassaID: true } },
-      stall: { select: { id: true, stallNumber: true } },
       transactions: {
         where: { status: { in: ["PAID", "PARTIAL_PAID"] } },
         orderBy: { createdAt: "desc" },
@@ -414,7 +412,6 @@ const initiatePaymentWithAllocation = async (
     where: { id: leaseId, isActive: true },
     include: {
       store: { select: { id: true, storeNumber: true, kassaID: true } },
-      stall: { select: { id: true, stallNumber: true } },
       owner: { select: { fullName: true } },
       transactions: {
         where: { status: "PAID" },
@@ -604,7 +601,6 @@ const findLeasesByOwner = async (identifier) => {
     include: {
       owner: { select: { fullName: true, tin: true, phoneNumber: true } },
       store: { select: { storeNumber: true } },
-      stall: { select: { stallNumber: true } },
       transactions: {
         where: { status: { in: ["PAID", "PARTIAL_PAID"] } },
         orderBy: { createdAt: "desc" },
@@ -662,14 +658,6 @@ const searchPublicLeases = async (term) => {
             },
           },
           {
-            stall: {
-              stallNumber: {
-                contains: searchTerm,
-                mode: "insensitive",
-              },
-            },
-          },
-          {
             owner: {
               fullName: {
                 contains: searchTerm,
@@ -688,7 +676,6 @@ const searchPublicLeases = async (term) => {
       include: {
         owner: { select: { fullName: true, tin: true, phoneNumber: true } },
         store: { select: { storeNumber: true } },
-        stall: { select: { stallNumber: true } },
         transactions: {
           where: { status: { in: ["PAID", "PARTIAL_PAID"] } },
           orderBy: { createdAt: "desc" },
