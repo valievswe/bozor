@@ -92,7 +92,6 @@ const getAllLeases = async (queryParams) => {
       { owner: { fullName: { contains: search, mode: "insensitive" } } },
       { store: { storeNumber: { contains: search, mode: "insensitive" } } },
       { store: { kassaID: { contains: search, mode: "insensitive" } } },
-      { stall: { stallNumber: { contains: search, mode: "insensitive" } } },
     ];
   }
 
@@ -104,7 +103,6 @@ const getAllLeases = async (queryParams) => {
     include: {
       owner: { select: { fullName: true } },
       store: { select: { storeNumber: true } },
-      stall: { select: { stallNumber: true } },
       transactions: {
         orderBy: { createdAt: "desc" },
         take: 1,
