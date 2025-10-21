@@ -233,7 +233,7 @@
 
 const express = require("express");
 const router = express.Router();
-const stallController = require("../controllers/stall.controller");
+const stallController = require("../controllers/stallControllers");
 
 router.post("/", stallController.createStall);
 router.get("/", stallController.getAllStalls);
