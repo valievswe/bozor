@@ -121,15 +121,17 @@ const getAllLeases = async (queryParams) => {
   const leasesWithPaymentStatus = await Promise.all(
     leases.map(async (lease) => {
       // Get attendance count for current month (for daily payment interval)
-      const attendanceCount = await prisma.attendance.count({
-        where: {
-          leaseId: lease.id,
-          date: {
-            gte: new Date(currentYear, currentMonth, 1),
-            lt: new Date(currentYear, currentMonth + 1, 1),
-          },
-        },
-      });
+      const attendanceCount = lease.stallId
+        ? await prisma.attendance.count({
+            where: {
+              stallId: lease.stallId,
+              date: {
+                gte: new Date(currentYear, currentMonth, 1),
+                lt: new Date(currentYear, currentMonth + 1, 1),
+              },
+            },
+          })
+        : 0;
 
       // Include ALL transactions for proper calculation
       const leaseWithAllTransactions = {
