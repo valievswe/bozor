@@ -353,4 +353,4 @@ class ClickPaymentService {
   }
 }
 
-module.exports = ClickPaymentService;
+module.exports = new ClickPaymentService();
