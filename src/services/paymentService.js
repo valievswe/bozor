@@ -939,15 +939,19 @@ const initiateStallPayment = async (stallId, payment_method) => {
 
     checkoutUrl = `https://checkout.paycom.uz/${params.toString()}`;
   } else if (finalPaymentMethod === "CLICK") {
-    const serviceId = process.env.CLICK_SERVICE_ID;
-    const merchantId = process.env.CLICK_MERCHANT_ID;
+    // Get tenant-specific Click configuration
+    if (!clickPaymentService.isClickEnabled(tenantId)) {
+      throw new Error(`Click.uz is not available for tenant: ${tenantId}`);
+    }
+
+    const config = clickPaymentService.getTenantConfig(tenantId);
     const merchantUserId = existingAttendance.id;
     const merchantTransId = existingAttendance.id;
     const amountFormatted = amount.toFixed(2);
 
     const params = new URLSearchParams({
-      service_id: serviceId,
-      merchant_id: merchantId,
+      service_id: config.serviceId,
+      merchant_id: config.merchantId,
       merchant_user_id: merchantUserId.toString(),
       amount: amountFormatted,
       transaction_param: merchantTransId.toString(),

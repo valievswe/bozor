@@ -40,6 +40,13 @@ class ClickPaymentService {
   }
 
   isClickEnabled(tenantId) {
+    // If environment variables are set, Click is enabled
+    if (process.env.PAYMENT_SERVICE_ID && process.env.PAYMENT_MERCHANT_ID && process.env.PAYMENT_SECRET_KEY) {
+      console.log(`[INFO] isClickEnabled(${tenantId}) → true (env vars present)`);
+      return true;
+    }
+
+    // Otherwise check tenant config
     const enabled =
       tenantId !== "ipak_yuli" && this.tenantConfig.hasOwnProperty(tenantId);
     console.log(`[INFO] isClickEnabled(${tenantId}) → ${enabled}`);
@@ -47,6 +54,16 @@ class ClickPaymentService {
   }
 
   getTenantConfig(tenantId) {
+    // Priority 1: Use environment variables if available (for production)
+    if (process.env.PAYMENT_SERVICE_ID && process.env.PAYMENT_MERCHANT_ID && process.env.PAYMENT_SECRET_KEY) {
+      return {
+        serviceId: process.env.PAYMENT_SERVICE_ID,
+        merchantId: process.env.PAYMENT_MERCHANT_ID,
+        secretKey: process.env.PAYMENT_SECRET_KEY,
+      };
+    }
+
+    // Priority 2: Fall back to hardcoded tenant config
     if (!this.isClickEnabled(tenantId))
       throw new Error(`Click.uz not enabled for tenant: ${tenantId}`);
     const config = this.tenantConfig[tenantId];
