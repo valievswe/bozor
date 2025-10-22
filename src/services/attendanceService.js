@@ -62,6 +62,12 @@ class AttendanceService {
     });
     if (!attendance) throw new Error("Attendance not found.");
 
+    // Prevent deletion of paid attendance to avoid repayment fraud
+    if (attendance.status === "PAID") {
+      throw new Error("Cannot delete paid attendance. Payments are final and cannot be reversed.");
+    }
+
+    // Only delete unpaid attendance
     if (attendance.transactionId) {
       await prisma.transaction.delete({
         where: { id: attendance.transactionId },
