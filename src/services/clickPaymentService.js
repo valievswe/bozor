@@ -303,9 +303,27 @@ class ClickPaymentService {
       const isDaily = !transaction;
 
       if (isDaily) {
+        // For stall attendance payments
+        const attendance = await prisma.attendance.findUnique({
+          where: { id: parseInt(merchant_trans_id) },
+        });
+
+        // Update the linked transaction status if it exists
+        if (attendance && attendance.transactionId) {
+          await prisma.transaction.update({
+            where: { id: attendance.transactionId },
+            data: {
+              status: "PAID",
+              paymentMethod: "CLICK",
+              paymeTransactionId: click_trans_id,
+            },
+          });
+        }
+
+        // Update the attendance status
         await prisma.attendance.update({
           where: { id: parseInt(merchant_trans_id) },
-          data: { status: "PAID", transactionId: prepareTransaction.id },
+          data: { status: "PAID" },
         });
       } else {
         await prisma.transaction.update({
