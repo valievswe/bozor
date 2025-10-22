@@ -1,9 +1,9 @@
-// src/controllers/paymentController.js
+
 const paymentService = require("../services/paymentService");
 
-// --- PUBLIC FUNCTIONS ---
 
-// 1️⃣ Faol lease ma'lumotini olish
+
+
 const getLeaseForPayment = async (req, res) => {
   try {
     const leaseId = parseInt(req.params.id, 10);
@@ -20,7 +20,7 @@ const getLeaseForPayment = async (req, res) => {
   }
 };
 
-// 2️⃣ To‘lovni boshlash (bo‘lib to‘lash qo‘shilgan)
+
 const initiatePayment = async (req, res) => {
   try {
     console.log("\n" + "=".repeat(60));
@@ -29,10 +29,10 @@ const initiatePayment = async (req, res) => {
     console.log("Body:", JSON.stringify(req.body, null, 2));
     console.log("=".repeat(60));
 
-    // Extract fields - payment_method is now optional (auto-selects based on tenant)
+    
     const { leaseId, amount, payment_method } = req.body;
 
-    // Validate required fields
+    
     if (!leaseId || !amount) {
       return res.status(400).json({
         success: false,
@@ -40,8 +40,8 @@ const initiatePayment = async (req, res) => {
       });
     }
 
-    // Call service with optional payment_method
-    // If not provided, it will auto-select: ipak_yuli -> PAYME, others -> CLICK
+    
+    
     const result = await paymentService.initiatePayment(
       leaseId,
       amount,
@@ -68,7 +68,7 @@ const initiatePayment = async (req, res) => {
   }
 };
 
-// 3️⃣ Tadbirkor bo‘yicha lease’larni topish
+
 const findLeasesByOwner = async (req, res) => {
   try {
     const { identifier } = req.body;
@@ -85,7 +85,7 @@ const findLeasesByOwner = async (req, res) => {
   }
 };
 
-// 4️⃣ Public qidiruv
+
 const searchPublic = async (req, res) => {
   try {
     const { term } = req.query;
@@ -98,7 +98,7 @@ const searchPublic = async (req, res) => {
   }
 };
 
-// 5️⃣ Oyma-oy to‘lov va qarz hisoboti
+
 const getLeasePaymentSummary = async (req, res) => {
   try {
     const leaseId = parseInt(req.params.id, 10);
@@ -132,9 +132,9 @@ const getCurrentMonthDebt = async (req, res) => {
   }
 };
 
-// ==================== STALL ATTENDANCE PAYMENT ==================== //
 
-// 7️⃣ Get stall information for attendance payment
+
+
 const getStallForPayment = async (req, res) => {
   try {
     const stallId = parseInt(req.params.id, 10);
@@ -151,7 +151,7 @@ const getStallForPayment = async (req, res) => {
   }
 };
 
-// 8️⃣ Initiate attendance payment for a stall
+
 const initiateStallPayment = async (req, res) => {
   try {
     const stallId = parseInt(req.params.id, 10);
@@ -174,7 +174,7 @@ const initiateStallPayment = async (req, res) => {
   }
 };
 
-// 9️⃣ Check today's attendance status for a stall
+
 const getTodayAttendance = async (req, res) => {
   try {
     const stallId = parseInt(req.params.id, 10);
