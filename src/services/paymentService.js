@@ -8,6 +8,12 @@ const axios = require("axios");
 
 // --- HELPER FUNCTIONS ---
 
+function getUtcDateOnly(date = new Date()) {
+  return new Date(
+    Date.UTC(date.getFullYear(), date.getMonth(), date.getDate())
+  );
+}
+
 const calculateExpectedPayment = (lease, attendanceCount = 0) => {
   const totalFee =
     (Number(lease.shopMonthlyFee) || 0) +
@@ -846,7 +852,7 @@ const getStallForPayment = async (stallId) => {
     where: { id: stallId },
     include: {
       Section: true,
-      saleType: true,
+      SaleType: true,
     },
   });
 
@@ -855,8 +861,7 @@ const getStallForPayment = async (stallId) => {
   }
 
   // Check today's attendance
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = getUtcDateOnly();
 
   const todayAttendance = await prisma.attendance.findUnique({
     where: {
@@ -887,8 +892,7 @@ const initiateStallPayment = async (stallId, payment_method) => {
     throw new Error("Ushbu rasta uchun kunlik to'lov miqdori belgilanmagan");
   }
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = getUtcDateOnly();
 
   const existingAttendance = await prisma.attendance.findUnique({
     where: {
@@ -975,8 +979,7 @@ const initiateStallPayment = async (stallId, payment_method) => {
  * Get today's attendance for a stall
  */
 const getTodayAttendance = async (stallId) => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = getUtcDateOnly();
 
   const attendance = await prisma.attendance.findUnique({
     where: {
