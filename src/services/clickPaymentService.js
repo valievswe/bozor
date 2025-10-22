@@ -133,9 +133,13 @@ class ClickPaymentService {
 
       if (!transaction) {
         const attendanceId = parseInt(merchant_trans_id);
+        console.log(`[PREPARE] No transaction found with ID ${merchant_trans_id}, checking for attendance...`);
+
         let attendance = await prisma.attendance.findUnique({
           where: { id: attendanceId },
         });
+
+        console.log(`[PREPARE] Attendance:`, attendance ? `ID ${attendance.id}, status: ${attendance.status}, transactionId: ${attendance.transactionId}` : 'NOT FOUND');
 
         if (!attendance || attendance.status === "PAID")
           return {
@@ -146,6 +150,7 @@ class ClickPaymentService {
           };
 
         if (!attendance.transactionId) {
+          console.log(`[PREPARE] Creating new transaction for attendance ${attendance.id}`);
           const newTransaction = await prisma.transaction.create({
             data: {
               amount: attendance.amount || 0,
@@ -153,12 +158,16 @@ class ClickPaymentService {
               status: "PENDING",
             },
           });
+          console.log(`[PREPARE] Created transaction ID ${newTransaction.id}`);
+
           await prisma.attendance.update({
             where: { id: attendance.id },
             data: { transactionId: newTransaction.id },
           });
+          console.log(`[PREPARE] Linked transaction ${newTransaction.id} to attendance ${attendance.id}`);
           transaction = newTransaction;
         } else {
+          console.log(`[PREPARE] Using existing transaction ${attendance.transactionId}`);
           transaction = await prisma.transaction.findUnique({
             where: { id: attendance.transactionId },
           });
@@ -302,14 +311,19 @@ class ClickPaymentService {
       });
       const isDaily = !transaction;
 
+      console.log(`[COMPLETE] merchant_trans_id: ${merchant_trans_id}, isDaily: ${isDaily}`);
+
       if (isDaily) {
         // For stall attendance payments
         const attendance = await prisma.attendance.findUnique({
           where: { id: parseInt(merchant_trans_id) },
         });
 
+        console.log(`[COMPLETE] Found attendance:`, attendance ? `ID ${attendance.id}, status: ${attendance.status}, transactionId: ${attendance.transactionId}` : 'NOT FOUND');
+
         // Update the linked transaction status if it exists
         if (attendance && attendance.transactionId) {
+          console.log(`[COMPLETE] Updating transaction ${attendance.transactionId} to PAID`);
           await prisma.transaction.update({
             where: { id: attendance.transactionId },
             data: {
@@ -318,14 +332,19 @@ class ClickPaymentService {
               paymeTransactionId: click_trans_id,
             },
           });
+        } else {
+          console.log(`[COMPLETE] No linked transaction found for attendance ${merchant_trans_id}`);
         }
 
         // Update the attendance status
-        await prisma.attendance.update({
+        console.log(`[COMPLETE] Updating attendance ${merchant_trans_id} to PAID`);
+        const updatedAttendance = await prisma.attendance.update({
           where: { id: parseInt(merchant_trans_id) },
           data: { status: "PAID" },
         });
+        console.log(`[COMPLETE] Attendance updated successfully:`, updatedAttendance);
       } else {
+        console.log(`[COMPLETE] Updating lease transaction ${merchant_trans_id} to PAID`);
         await prisma.transaction.update({
           where: { id: parseInt(merchant_trans_id) },
           data: {

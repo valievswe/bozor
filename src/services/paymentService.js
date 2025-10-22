@@ -949,13 +949,16 @@ const initiateStallPayment = async (stallId, payment_method) => {
     const merchantTransId = existingAttendance.id;
     const amountFormatted = amount.toFixed(2);
 
+    const frontendUrl = process.env.FRONTEND_URL ||
+                        (process.env.MY_DOMAIN ? `https://${process.env.MY_DOMAIN}` : "http://localhost:5173");
+
     const params = new URLSearchParams({
       service_id: config.serviceId,
       merchant_id: config.merchantId,
       merchant_user_id: merchantUserId.toString(),
       amount: amountFormatted,
       transaction_param: merchantTransId.toString(),
-      return_url: `${process.env.FRONTEND_URL || "http://localhost:5173"}/payment/success`,
+      return_url: `${frontendUrl}/payment/success`,
       card_type: "uzcard",
     });
 
