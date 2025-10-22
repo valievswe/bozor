@@ -86,13 +86,13 @@ const getLeaseForPayment = async (leaseId) => {
 
   const attendanceCount = lease.stallId
     ? await prisma.attendance.count({
-        where: {
-          stallId: lease.stallId,
-          date: {
-            gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-          },
+      where: {
+        stallId: lease.stallId,
+        date: {
+          gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
         },
-      })
+      },
+    })
     : 0;
   const totalFee = calculateExpectedPayment(lease, attendanceCount);
   const paymentStatus = calculateLeasePaymentStatus(lease, attendanceCount);
@@ -148,14 +148,14 @@ const initiatePayment = async (leaseId, amount, payment_method = null) => {
   // Get attendance count for current month if lease has a stall
   const attendanceCount = lease.stallId
     ? await prisma.attendance.count({
-        where: {
-          stallId: lease.stallId,
-          date: {
-            gte: new Date(currentYear, currentMonth, 1),
-            lt: new Date(currentYear, currentMonth + 1, 1),
-          },
+      where: {
+        stallId: lease.stallId,
+        date: {
+          gte: new Date(currentYear, currentMonth, 1),
+          lt: new Date(currentYear, currentMonth + 1, 1),
         },
-      })
+      },
+    })
     : 0;
   const expectedAmount = calculateExpectedPayment(lease, attendanceCount);
 
@@ -327,9 +327,9 @@ const getLeasePaymentSummary = async (leaseId) => {
   // Fetch all attendance records for this lease's stall if it has one
   const attendanceRecords = lease.stallId
     ? await prisma.attendance.findMany({
-        where: { stallId: lease.stallId },
-        select: { date: true },
-      })
+      where: { stallId: lease.stallId },
+      select: { date: true },
+    })
     : [];
 
   const isDaily = lease.paymentInterval === "DAILY";
@@ -636,14 +636,14 @@ const findLeasesByOwner = async (identifier) => {
     leases.map((lease) =>
       lease.stallId
         ? prisma.attendance.count({
-            where: {
-              stallId: lease.stallId,
-              date: {
-                gte: new Date(currentYear, currentMonth, 1),
-                lt: new Date(currentYear, currentMonth + 1, 1),
-              },
+          where: {
+            stallId: lease.stallId,
+            date: {
+              gte: new Date(currentYear, currentMonth, 1),
+              lt: new Date(currentYear, currentMonth + 1, 1),
             },
-          })
+          },
+        })
         : Promise.resolve(0)
     )
   );
@@ -738,14 +738,14 @@ const searchPublicLeases = async (term) => {
       leases.map((lease) =>
         lease.stallId
           ? prisma.attendance.count({
-              where: {
-                stallId: lease.stallId,
-                date: {
-                  gte: new Date(currentYear, currentMonth, 1),
-                  lt: new Date(currentYear, currentMonth + 1, 1),
-                },
+            where: {
+              stallId: lease.stallId,
+              date: {
+                gte: new Date(currentYear, currentMonth, 1),
+                lt: new Date(currentYear, currentMonth + 1, 1),
               },
-            })
+            },
+          })
           : Promise.resolve(0)
       )
     );
@@ -799,14 +799,14 @@ const getCurrentMonthDebt = async (leaseId) => {
   // Get attendance count for current month if lease has a stall
   const attendanceCount = lease.stallId
     ? await prisma.attendance.count({
-        where: {
-          stallId: lease.stallId,
-          date: {
-            gte: new Date(currentYear, currentMonth, 1),
-            lt: new Date(currentYear, currentMonth + 1, 1),
-          },
+      where: {
+        stallId: lease.stallId,
+        date: {
+          gte: new Date(currentYear, currentMonth, 1),
+          lt: new Date(currentYear, currentMonth + 1, 1),
         },
-      })
+      },
+    })
     : 0;
 
   const expectedAmount = calculateExpectedPayment(lease, attendanceCount);
@@ -831,8 +831,8 @@ const getCurrentMonthDebt = async (leaseId) => {
       debt === 0
         ? "PAID"
         : totalPaidThisMonth > 0
-        ? "PARTIALLY_PAID"
-        : "UNPAID",
+          ? "PARTIALLY_PAID"
+          : "UNPAID",
   };
 };
 
@@ -874,9 +874,6 @@ const getStallForPayment = async (stallId) => {
   };
 };
 
-/**
- * Initiate stall payment for today's attendance
- */
 const initiateStallPayment = async (stallId, payment_method) => {
   const stall = await prisma.stall.findUnique({
     where: { id: stallId },
@@ -893,7 +890,6 @@ const initiateStallPayment = async (stallId, payment_method) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // Check if already paid today
   const existingAttendance = await prisma.attendance.findUnique({
     where: {
       stallId_date: {
@@ -903,11 +899,18 @@ const initiateStallPayment = async (stallId, payment_method) => {
     },
   });
 
-  if (existingAttendance && existingAttendance.status === "PAID") {
+  if (!existingAttendance) {
+    throw new Error("Bugungi kun uchun to'lov uchun attendance topilmadi");
+  }
+
+  if (existingAttendance.status === "PAID") {
     throw new Error("Bugungi kun uchun to'lov allaqachon amalga oshirilgan");
   }
 
-  // Auto-select payment method based on tenant
+  if (existingAttendance.status !== "UNPAID") {
+    throw new Error("To'lov holati noto‘g‘ri, faqat UNPAID holatiga ruxsat beriladi");
+  }
+
   const tenantId = process.env.TENANT_ID || "default";
   let finalPaymentMethod = payment_method;
 
@@ -916,33 +919,11 @@ const initiateStallPayment = async (stallId, payment_method) => {
   }
 
   const amount = Number(stall.dailyFee);
-
-  // Create or update attendance record
-  const attendance = await prisma.attendance.upsert({
-    where: {
-      stallId_date: {
-        stallId: stall.id,
-        date: today,
-      },
-    },
-    update: {
-      amount: amount,
-      status: "UNPAID",
-    },
-    create: {
-      stallId: stall.id,
-      date: today,
-      amount: amount,
-      status: "UNPAID",
-    },
-  });
-
-  // Generate payment URL based on payment method
   let checkoutUrl;
 
   if (finalPaymentMethod === "PAYME") {
     const merchantId = process.env.PAYME_MERCHANT_ID;
-    const accountId = `stall_${stallId}_attendance_${attendance.id}`;
+    const accountId = `stall_${stallId}_attendance_${existingAttendance.id}`;
     const amountInTiyin = Math.round(amount * 100);
 
     const params = new URLSearchParams({
@@ -956,8 +937,8 @@ const initiateStallPayment = async (stallId, payment_method) => {
   } else if (finalPaymentMethod === "CLICK") {
     const serviceId = process.env.CLICK_SERVICE_ID;
     const merchantId = process.env.CLICK_MERCHANT_ID;
-    const merchantUserId = attendance.id; // This will be passed as merchant_user_id
-    const merchantTransId = attendance.id; // This will be passed as transaction_param (what becomes merchant_trans_id)
+    const merchantUserId = existingAttendance.id;
+    const merchantTransId = existingAttendance.id;
     const amountFormatted = amount.toFixed(2);
 
     const params = new URLSearchParams({
@@ -977,10 +958,10 @@ const initiateStallPayment = async (stallId, payment_method) => {
     success: true,
     checkoutUrl,
     attendance: {
-      id: attendance.id,
-      date: attendance.date,
-      amount: attendance.amount,
-      status: attendance.status,
+      id: existingAttendance.id,
+      date: existingAttendance.date,
+      amount: existingAttendance.amount,
+      status: existingAttendance.status,
     },
     stall: {
       id: stall.id,
@@ -988,6 +969,7 @@ const initiateStallPayment = async (stallId, payment_method) => {
     },
   };
 };
+
 
 /**
  * Get today's attendance for a stall
