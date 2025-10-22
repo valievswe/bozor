@@ -57,15 +57,8 @@ router.get("/public/stalls/:id", paymentController.getStallForPayment);
  *           schema:
  *             type: object
  *             properties:
- *               amount:
- *                 type: number
- *                 example: 500000
- *               customerName:
- *                 type: string
- *                 example: John Doe
- *               customerPhone:
- *                 type: string
- *                 example: "+998901234567"
+ *               payment_method:
+ *                 type : string
  *     responses:
  *       200:
  *         description: Payment initiated successfully
