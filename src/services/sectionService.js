@@ -10,7 +10,7 @@ class SectionService {
 
   async getAllSections() {
     return await prisma.section.findMany({
-      include: { stalls: true },
+      include: { Stall: true },
       orderBy: { id: "asc" },
     });
   }
@@ -18,7 +18,7 @@ class SectionService {
   async getSectionById(id) {
     return await prisma.section.findUnique({
       where: { id: Number(id) },
-      include: { stalls: true },
+      include: { Stall: true },
     });
   }
 
