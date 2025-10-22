@@ -45,16 +45,9 @@ class AttendanceService {
     });
     if (!attendance) throw new Error("Attendance not found.");
 
+    // Prevent manual payment marking - payments must go through payment gateway
     if (data.status && data.status === "PAID") {
-      if (!attendance.transactionId) {
-        const transaction = await prisma.transaction.create({
-          data: {
-            amount: attendance.amount || 0,
-            attendance: { connect: { id: attendance.id } },
-          },
-        });
-        data.transactionId = transaction.id;
-      }
+      throw new Error("Cannot manually mark attendance as PAID. Payments must be made through the payment gateway.");
     }
 
     return prisma.attendance.update({ where: { id }, data });
@@ -154,27 +147,40 @@ class AttendanceService {
 
   // Bulk create attendance for all stalls on a specific date
   async bulkCreate(date) {
-    const targetDate = date ? getUtcDateOnly(new Date(date)) : getUtcDateOnly();
+    try {
+      const targetDate = date ? getUtcDateOnly(new Date(date)) : getUtcDateOnly();
+      console.log('[BULK CREATE] Creating attendance for date:', targetDate);
 
-    // Get all stalls
-    const stalls = await prisma.stall.findMany();
+      // Get all stalls
+      const stalls = await prisma.stall.findMany();
+      console.log('[BULK CREATE] Found stalls:', stalls.length);
 
-    const operations = stalls.map((stall) =>
-      prisma.attendance.upsert({
-        where: {
-          stallId_date: { stallId: stall.id, date: targetDate },
-        },
-        update: {},
-        create: {
-          stallId: stall.id,
-          date: targetDate,
-          status: "UNPAID",
-          amount: stall.dailyFee || 0,
-        },
-      })
-    );
+      if (stalls.length === 0) {
+        throw new Error('No stalls found to create attendance for');
+      }
 
-    return prisma.$transaction(operations);
+      const operations = stalls.map((stall) =>
+        prisma.attendance.upsert({
+          where: {
+            stallId_date: { stallId: stall.id, date: targetDate },
+          },
+          update: {},
+          create: {
+            stallId: stall.id,
+            date: targetDate,
+            status: "UNPAID",
+            amount: stall.dailyFee || 0,
+          },
+        })
+      );
+
+      const result = await prisma.$transaction(operations);
+      console.log('[BULK CREATE] Successfully created/updated:', result.length);
+      return result;
+    } catch (error) {
+      console.error('[BULK CREATE ERROR]:', error);
+      throw new Error(`Failed to bulk create attendance: ${error.message}`);
+    }
   }
 
   // Bulk update multiple attendance records
@@ -189,42 +195,10 @@ class AttendanceService {
     return prisma.$transaction(operations);
   }
 
-  // Mark all as paid for a specific date
+  // Mark all as paid for a specific date - DISABLED
+  // Stall payments should only happen through Click.uz payment flow
   async markAllPaid(date) {
-    const targetDate = date ? getUtcDateOnly(new Date(date)) : getUtcDateOnly();
-
-    // Get all unpaid attendances for this date
-    const unpaidAttendances = await prisma.attendance.findMany({
-      where: {
-        date: targetDate,
-        status: "UNPAID",
-      },
-    });
-
-    // Create transactions and update attendance records
-    const operations = unpaidAttendances.map(async (attendance) => {
-      let transactionId = attendance.transactionId;
-
-      if (!transactionId) {
-        const transaction = await prisma.transaction.create({
-          data: {
-            amount: attendance.amount || 0,
-            attendance: { connect: { id: attendance.id } },
-          },
-        });
-        transactionId = transaction.id;
-      }
-
-      return prisma.attendance.update({
-        where: { id: attendance.id },
-        data: {
-          status: "PAID",
-          transactionId,
-        },
-      });
-    });
-
-    return Promise.all(operations);
+    throw new Error('Manual payment marking is disabled for stalls. All payments must go through the payment gateway.');
   }
 }
 
