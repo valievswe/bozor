@@ -305,20 +305,16 @@ class ClickPaymentService {
         };
       }
 
-      // Determine if daily attendance
-      let transaction = await prisma.transaction.findUnique({
+      // Determine if daily attendance by checking if merchant_trans_id is an attendance ID
+      const attendance = await prisma.attendance.findUnique({
         where: { id: parseInt(merchant_trans_id) },
       });
-      const isDaily = !transaction;
+      const isDaily = !!attendance;
 
-      console.log(`[COMPLETE] merchant_trans_id: ${merchant_trans_id}, isDaily: ${isDaily}`);
+      console.log(`[COMPLETE] merchant_trans_id: ${merchant_trans_id}, isDaily: ${isDaily}, found attendance: ${!!attendance}`);
 
       if (isDaily) {
         // For stall attendance payments
-        const attendance = await prisma.attendance.findUnique({
-          where: { id: parseInt(merchant_trans_id) },
-        });
-
         console.log(`[COMPLETE] Found attendance:`, attendance ? `ID ${attendance.id}, status: ${attendance.status}, transactionId: ${attendance.transactionId}` : 'NOT FOUND');
 
         // Update the linked transaction status if it exists
