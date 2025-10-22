@@ -12,7 +12,7 @@ const options = {
     },
     servers: [
       {
-        url: `http://103.102.46.20:${process.env.PORT}//api`,
+        url: `http://103.102.46.20:${process.env.PORT}/api`,
         description: "Local server",
       },
     ],
